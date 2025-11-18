@@ -1,0 +1,7 @@
+.textbox {
+    width: 100%;
+    padding: 10px;
+    font-size: 18px;
+    border: 1px solid #aaa;
+    border-radius: 8px;
+}

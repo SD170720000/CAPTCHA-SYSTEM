@@ -1,0 +1,24 @@
+{% extends "index.html" %}
+{% block title %}Human Verification{% endblock %}
+
+{% block body %}
+<div class="card" id="main-card">
+
+    <h1 id="main-title">Human Verification</h1>
+    <p id="main-desc">Click Start to begin the verification.</p>
+
+    <button id="start-btn" class="start-btn">Start</button>
+
+    <!-- Captcha Section -->
+    <div id="captcha-section" style="display:none;">
+        
+        <h3 id="step-label">(1/2)</h3>
+
+        <div id="captcha-container"></div>
+
+        <button id="final-verify-btn" class="final-btn" disabled>Verify</button>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+{% endblock %}
