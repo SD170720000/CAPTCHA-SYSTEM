@@ -77,48 +77,55 @@ function loadAttemptUI(attempt) {
 
 // CENTRAL SEND VERIFY
 async function sendVerify(statusOverride = null) {
-  const userAnswer = window.userCollectedAnswer || "";
-  const correctWord = window.correctWord || "";
+    const userAnswer = window.userCollectedAnswer || "";
+    const correctWord = window.correctWord || "";
 
-  let status = statusOverride;
-  if (!status) {
-    // call captcha API verify
-    let captchaRes = { status: "failed" };
-    try {
-      if (typeof window.verifyCaptcha1 === "function") captchaRes = await window.verifyCaptcha1();
-    } catch (e) {
-      console.error("captcha verify error", e);
-      captchaRes = { status: "failed" };
+    window.METRICS_endChallenge();
+
+    let status = statusOverride;
+    if (!status) {
+        // call captcha API verify
+        let captchaRes = { status: "failed" };
+        try {
+            if (typeof window.verifyCaptcha1 === "function") captchaRes = await window.verifyCaptcha1();
+        } catch (e) {
+            console.error("captcha verify error", e);
+            captchaRes = { status: "failed" };
+        }
+        status = captchaRes.status || "failed";
     }
-    status = captchaRes.status || "failed";
-  }
 
-  const res = await fetch(`/verify/1`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_id: sessionId,
-      user_answer: userAnswer,
-      correct_word: correctWord,
-      status: status
-    })
-  });
+    // send to api to delete challenge id (need to implement later)
 
-  const data = await res.json();
+    
+    const res = await fetch(`/verify/1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+        session_id: sessionId,
+        user_answer: userAnswer,
+        correct_word: correctWord,
+        metrics: window.METRICS_export(),
+        status: status
+        })
 
-  if (data.status === "passed") {
-    if (typeof window.showSuccessUI === "function") window.showSuccessUI();
-    return;
-  }
+    });
 
-  if (!data.completed && data.next_attempt) {
-    setTimeout(() => loadCaptcha(), 200);
-    return;
-  }
+    const data = await res.json();
 
-  if (data.completed) {
-    showResolveButton();
-  }
+    if (data.status === "passed") {
+        if (typeof window.showSuccessUI === "function") window.showSuccessUI();
+        return;
+    }
+
+    if (!data.completed && data.next_attempt) {
+        setTimeout(() => loadCaptcha(), 200);
+        return;
+    }
+
+    if (data.completed) {
+        showResolveButton();
+    }
 }
 
 // VERIFY BUTTON

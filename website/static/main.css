@@ -3,37 +3,69 @@
 :root {
     --bg: #f5f5f5;
     --text: #222;
-    --primary: #3b82f6;
+    --primary: hsl(217, 100%, 56%);
+    
+    --f1: 'Ubuntu', sans-serif;
+    --f2: 'Work Sans', sans-serif;
+    --fs1: 14px;
+    --fs2: 16px;
+    --fs3: 18px;
+    --fs4: 24px;
+    --c1: #f5f5f5;
+    --c1_bright: white;
+    --c2: #bcbcbd;
+    --c3: rgb(22, 38, 54);
+    --c4: hsl(217, 91%, 60%);
+    --c5: hsl(217, 91%, 40%);
 }
 
 body {
     margin: 0;
-    background: var(--bg);
+    font-family: var(--f2);
+    background: var(--c1);
     padding: 100px 20px 50px;
     display: flex;
     align-items: center;
     justify-content: center;
+    color: var(--c3);
     font-family: 'Work Sans', sans-serif;
 }
 
 .card {
     width: 400px;
-    background: white;
+    background: var(--c1_bright);
     padding: 30px;
     border-radius: 16px;
     text-align: center;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.1);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.044);
+}
+
+.card h1 {
+    font-family: var(--f1);
+}
+
+#main-desc {
+    font-size: var(--fs2);
+    color: var(--c2)
 }
 
 .start-btn {
     background: var(--primary);
-    color: white;
-    padding: 12px;
+    color: var(--c1_bright);
+    padding: 16px;
     border-radius: 8px;
     border: none;
     width: 100%;
     cursor: pointer;
-    font-size: 18px;
+    font-size: var(--fs3);
+    font-weight: bolder;
+    font-family: var(--f1);
+    transition: background 0.3s ease-in-out;
+}
+
+.start-btn:hover {
+    background: var(--c5);
+    transition: background 0.3s ease-in-out;
 }
 
 .final-btn {

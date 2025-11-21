@@ -6,7 +6,7 @@ if (!window.__CAPTCHA1_LOADED__) {
 
   console.log("CAPTCHA-1 LOADED SAFELY");
 
-  const COUNTDOWN = 20;
+  const COUNTDOWN = 30;
   const CAPTCHA1_API = "http://localhost:5055";
 
   let challengeId = null;
@@ -28,9 +28,10 @@ if (!window.__CAPTCHA1_LOADED__) {
   };
 
   // INIT CAPTCHA
-  async function initCaptcha1() {
+async function initCaptcha1() {
     console.log("INIT CAPTCHA-1 RUNNING…");
 
+    
     const res = await fetch(`${CAPTCHA1_API}/get_challenge?sessionId=${encodeURIComponent(window.sessionId)}`);
     const data = await res.json();
 
@@ -47,6 +48,8 @@ if (!window.__CAPTCHA1_LOADED__) {
     window.userCollectedAnswer = "";
 
     userCollected = "";
+
+    window.METRICS_startChallenge();
 
     // UI elements
     const targetWordEl = document.getElementById("target-word");
@@ -107,9 +110,13 @@ function spawnLetter() {
       case 3: startX = w + 40; startY = Math.random() * (h - 40); dx = -(3 + Math.random() * 2); dy = 0; break;
     }
 
+    const spawn_id = window.METRICS_letterSpawn(letter, startX, startY);
+    el.dataset.spawn_id = spawn_id;
+
+
     el.style.left = `${startX}px`;
     el.style.top = `${startY}px`;
-    el.onclick = () => pickLetter(el, letter);
+    el.onclick = (ev) => pickLetter(el, letter, ev.clientX, ev.clientY);
 
     box.appendChild(el);
     fall(el, dx, dy, w, h);
@@ -126,22 +133,27 @@ function fall(el, dx, dy, w, h) {
     el.style.left = x + "px";
     el.style.top = y + "px";
     if (x < -60 || x > w + 60 || y < -60 || y > h + 60) {
-        try { el.remove(); } catch (e) {}
+        try {
+            el.remove(); window.METRICS_letterMiss(el.innerText, el.dataset.spawn_id);
+        } catch (e) {}
             clearInterval(t);
         }
     }, 20);
 }
 
 // PICK LETTER
-function pickLetter(el, letter) {
+function pickLetter(el, letter,  clickX, clickY) {
     try { el.remove(); } catch (e) {}
     if (userCollected.length >= 4) return;
     userCollected += letter;
     window.userCollectedAnswer = userCollected;
+
+    window.METRICS_letterClick(letter, el.dataset.spawn_id, clickX, clickY);
+
     updateProgress();
     if (userCollected.length === 4) {
         if (spawnInterval) { clearInterval(spawnInterval); spawnInterval = null; }
-        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+        // if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
         if (typeof window.onUserFilledProgress === "function") window.onUserFilledProgress();
     }
 }

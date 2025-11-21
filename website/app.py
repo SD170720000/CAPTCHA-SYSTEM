@@ -75,20 +75,23 @@ def get_challenge(cid):
 @app.route("/verify/<cid>", methods=["POST"])
 def verify(cid):
     data = request.json or {}
+    user_ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
     session_id = data.get("session_id")
     user_answer = (data.get("user_answer") or "").strip().upper()
     correct_word = (data.get("correct_word") or "").strip().upper()
     status = data.get("status")  # "passed", "failed", "timeout"
+    user_metrics = data.get("metrics") or {}
 
     session = sessions.get(session_id)
-    print(data)
     attempt = session["attempt"]
 
     meta = session["attempt_metadata"].get(str(attempt))
     meta["generated_answer"] = correct_word
     meta["user_answer"] = user_answer
     meta["status"] = status
+    meta["metrics"] = user_metrics
     meta["end_timestamp"] = time.time()
+    meta["ip_address"] = user_ip
 
     if status == "passed":
         session["completed"] = True
@@ -110,6 +113,28 @@ def verify(cid):
         "completed": False,
         "next_attempt": session["attempt"]
     })
+
+# ---------------------------------------
+# DOWNLOAD ALL SESSION DATA AS JSON FILE
+# ---------------------------------------
+@app.route("/download_sessions", methods=["GET"])
+def download_sessions():
+    from flask import Response
+    import json
+    import time
+
+    filename = f"sessions_export_{int(time.time())}.json"
+
+    json_data = json.dumps(sessions, indent=4)
+
+    return Response(
+        json_data,
+        mimetype="application/json",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
