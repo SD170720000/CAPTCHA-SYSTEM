@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import uuid, time
+from human_bot_classifier import BehaviourMetrics, evaluate_behaviour
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)
@@ -76,16 +77,18 @@ def get_challenge(cid):
 def verify(cid):
     data = request.json or {}
     user_ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+
     session_id = data.get("session_id")
     user_answer = (data.get("user_answer") or "").strip().upper()
     correct_word = (data.get("correct_word") or "").strip().upper()
-    status = data.get("status")  # "passed", "failed", "timeout"
+    status = data.get("status")        # "passed", "failed", "timeout"
     user_metrics = data.get("metrics") or {}
 
     session = sessions.get(session_id)
     attempt = session["attempt"]
 
-    meta = session["attempt_metadata"].get(str(attempt))
+    # Metadata for this attempt
+    meta = session["attempt_metadata"].setdefault(str(attempt), {})
     meta["generated_answer"] = correct_word
     meta["user_answer"] = user_answer
     meta["status"] = status
@@ -93,26 +96,45 @@ def verify(cid):
     meta["end_timestamp"] = time.time()
     meta["ip_address"] = user_ip
 
+    # ------------------------------------------------
+    # CASE: CAPTCHA PASSED → NOW RUN BEHAVIOUR CHECK
+    # ------------------------------------------------
     if status == "passed":
+        behaviour_result = evaluate_behaviour(BehaviourMetrics(**user_metrics))
+
         session["completed"] = True
         session["final_result"] = "passed"
-        print(session)
-        return jsonify({"status": "passed", "completed": True})
+        meta["behaviour_result"] = behaviour_result
 
+        print("SESSION FINISHED:", session)
+
+        return jsonify({
+            "status": "passed",
+            "completed": True,
+            "behaviour": behaviour_result   # ← returns bot/human score
+        })
+
+    # ------------------------------------------------
+    # FAILED ATTEMPT
+    # ------------------------------------------------
     session["attempt"] += 1
 
     if session["attempt"] > MAX_ATTEMPTS:
         session["completed"] = True
         session["final_result"] = "failed"
-        print(session)
+
+        print("SESSION FAILED:", session)
+
         return jsonify({"status": status, "completed": True})
 
-    print(session)
+    print("ATTEMPT FAILED:", session)
+
     return jsonify({
         "status": status,
         "completed": False,
         "next_attempt": session["attempt"]
     })
+
 
 # ---------------------------------------
 # DOWNLOAD ALL SESSION DATA AS JSON FILE

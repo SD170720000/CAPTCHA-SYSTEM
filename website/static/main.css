@@ -49,8 +49,14 @@ body {
     color: var(--c2)
 }
 
-.start-btn {
-    background: var(--primary);
+#step-label {
+    margin: 10px 0 20px 0;
+    color: #555;
+}
+
+
+button {
+    background: var(--c4);
     color: var(--c1_bright);
     padding: 16px;
     border-radius: 8px;
@@ -63,43 +69,12 @@ body {
     transition: background 0.3s ease-in-out;
 }
 
-.start-btn:hover {
+button:hover {
     background: var(--c5);
     transition: background 0.3s ease-in-out;
 }
 
-.final-btn {
-    background: var(--primary);
-    color: white;
-    padding: 12px;
-    margin-top: 20px;
-    border-radius: 8px;
-    border: none;
-    width: 100%;
-    cursor: pointer;
-    font-size: 18px;
-}
-
-.final-btn:disabled {
+button:disabled {
     opacity: .5;
     cursor: not-allowed;
-}
-
-#step-label {
-    margin: 10px 0 20px 0;
-    color: #555;
-}
-
-.flash-popup {
-    position: fixed;
-    bottom: 20px;
-    /* left: 20px; */
-    background: #ff4d4d;
-    padding: 14px 20px;
-    border-radius: 8px;
-    color: white;
-    font-weight: bold;
-    opacity: 1;
-    transition: opacity 0.4s ease;
-    z-index: 99999;
 }

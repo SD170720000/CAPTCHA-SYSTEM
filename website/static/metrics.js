@@ -1,178 +1,228 @@
-console.log("METRICS.JS LOADED");
+// metrics.js — FIXED VERSION (matches BehaviourMetrics correctly)
 
-// ============================================================
-// GLOBAL METRICS FINAL STRUCTURE
-// ============================================================
-window.CAPTCHA_METRICS = {
-    challenge_start: null,
-    challenge_end: null,
+window.METRICS = {
+    reactionTimes: [],
+    solveTimes: [],
+    keyIntervals: [],
+    mousePositions: [],
+    clicks: [],
+    hoverStart: null,
+    hoverDwellTimes: [],
+    backspaceCount: 0,
+    focusEvents: 0,
+    pauseIntervals: [],
+    entryPoints: new Set(),
+    pressureSamples: [],
+    swipeAccel: [],
 
-    mouse_path: [],        // {x,y,t}
-    total_clicks: 0,
-    click_positions: [],   // {x,y,t}
-
-    keypresses: [],        // {key,t}
-
-    window_focus_events: [],  // {type:"blur/focus", t}
-
-    idle_time_total: 0,
-    last_interaction: Date.now(),
-
-    spawns: [],            // {spawn_id,letter,x,y,spawn_t}
-    picked_letters: [],    // {letter,spawn_id,t,x,y,reaction}
-    missed_letters: []     // {letter,spawn_id,spawn_t}
+    startTime: null,
+    lastKeyTime: null,
+    lastMouseTime: null,
 };
 
-let SPAWN_COUNTER = 0;
+
+// ============ EVENT TRACKING =============
+
+window.METRICS.start = () => {
+    METRICS.startTime = performance.now();
+};
 
 
-// ============================================================
-// MOUSE MOVEMENT TRACKING
-// ============================================================
-document.addEventListener("mousemove", (e) => {
-    window.CAPTCHA_METRICS.mouse_path.push({
-        x: e.clientX,
-        y: e.clientY,
-        t: Date.now()
-    });
-    window.CAPTCHA_METRICS.last_interaction = Date.now();
-});
-
-
-// ============================================================
-// CLICK TRACKING
-// ============================================================
-document.addEventListener("click", (e) => {
-    window.CAPTCHA_METRICS.total_clicks++;
-    window.CAPTCHA_METRICS.click_positions.push({
-        x: e.clientX,
-        y: e.clientY,
-        t: Date.now()
-    });
-    window.CAPTCHA_METRICS.last_interaction = Date.now();
-});
-
-
-// ============================================================
-// KEYPRESS TRACKING
-// ============================================================
-document.addEventListener("keydown", (e) => {
-    window.CAPTCHA_METRICS.keypresses.push({
-        key: e.key,
-        t: Date.now()
-    });
-    window.CAPTCHA_METRICS.last_interaction = Date.now();
-});
-
-
-// ============================================================
-// WINDOW FOCUS/BLUR EVENTS
-// ============================================================
-window.addEventListener("blur", () => {
-    window.CAPTCHA_METRICS.window_focus_events.push({
-        type: "blur",
-        t: Date.now()
-    });
-});
-window.addEventListener("focus", () => {
-    window.CAPTCHA_METRICS.window_focus_events.push({
-        type: "focus",
-        t: Date.now()
-    });
-});
-
-
-// ============================================================
-// IDLE TIME TRACKER (idle if no interaction for > 5s)
-// ============================================================
-setInterval(() => {
-    const now = Date.now();
-    if (now - window.CAPTCHA_METRICS.last_interaction > 5000) {
-        window.CAPTCHA_METRICS.idle_time_total += 1; // per second
+// First interaction = reaction time
+document.addEventListener("mousedown", () => {
+    if (METRICS.reactionTimes.length === 0) {
+        METRICS.reactionTimes.push(performance.now() - METRICS.startTime);
     }
-}, 1000);
+});
 
 
-// ============================================================
-// HOOK: START OF CHALLENGE
-// ============================================================
-window.METRICS_startChallenge = function () {
-    window.CAPTCHA_METRICS.challenge_start = Date.now();
-};
+// Keystroke timing (we ignore unrealistic values)
+document.addEventListener("keydown", (e) => {
+    const now = performance.now();
+
+    if (METRICS.lastKeyTime) {
+        let delta = now - METRICS.lastKeyTime;
+
+        if (delta > 20 && delta < 800) {    // Ignore 0ms & insane 2s gaps
+            METRICS.keyIntervals.push(delta);
+            if (delta > 80) METRICS.pauseIntervals.push(delta);
+        }
+    }
+
+    METRICS.lastKeyTime = now;
+
+    if (e.key === "Backspace") METRICS.backspaceCount++;
+});
 
 
-// ============================================================
-// HOOK: LETTER SPAWN
-// ============================================================
-window.METRICS_letterSpawn = function (letter, x, y) {
-    SPAWN_COUNTER++;
+// Mouse movement tracking
+document.addEventListener("mousemove", (e) => {
+    const now = performance.now();
+    METRICS.mousePositions.push({ x: e.clientX, y: e.clientY, t: now });
 
-    window.CAPTCHA_METRICS.spawns.push({
-        spawn_id: SPAWN_COUNTER,
-        letter,
-        x,
-        y,
-        spawn_t: Date.now()
+    // FIX: entry points = ±30px from edges (not exactly 0px)
+    if (
+        e.clientX < 30 || e.clientX > window.innerWidth - 30 ||
+        e.clientY < 30 || e.clientY > window.innerHeight - 30
+    ) {
+        METRICS.entryPoints.add(`${e.clientX},${e.clientY}`);
+    }
+});
+
+
+// Hover / dwell detection
+document.addEventListener("mouseover", (e) => {
+    METRICS.hoverStart = performance.now();
+});
+
+document.addEventListener("mouseout", (e) => {
+    if (METRICS.hoverStart) {
+        let dwell = performance.now() - METRICS.hoverStart;
+        if (dwell > 20 && dwell < 2000) {
+            METRICS.hoverDwellTimes.push(dwell);
+        }
+    }
+});
+
+
+// Click offsets (FIXED)
+document.addEventListener("click", (e) => {
+    METRICS.clicks.push({
+        x: e.clientX,
+        y: e.clientY,
+        t: performance.now()
+    });
+});
+
+
+// Focus changes
+window.addEventListener("blur", () => METRICS.focusEvents++);
+window.addEventListener("focus", () => METRICS.focusEvents++);
+
+
+// ============ COMPUTATION HELPERS =============
+
+function computeStd(arr) {
+    if (!arr || arr.length < 2) return 0;
+    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const variance =
+        arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
+    return Math.sqrt(variance);
+}
+
+
+// FIX: normalized directional entropy (0–1)
+function computePathEntropy() {
+    if (METRICS.mousePositions.length < 3) return 0;
+
+    const angles = [];
+
+    for (let i = 1; i < METRICS.mousePositions.length; i++) {
+        const a = METRICS.mousePositions[i];
+        const b = METRICS.mousePositions[i - 1];
+
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+
+        let angle = Math.atan2(dy, dx);
+        angles.push(angle);
+    }
+
+    const bins = {};
+    angles.forEach(a => {
+        const bucket = Math.round(a * 10) / 10;
+        bins[bucket] = (bins[bucket] || 0) + 1;
     });
 
-    return SPAWN_COUNTER;
-};
+    const total = angles.length;
+    let entropy = 0;
+
+    for (let count of Object.values(bins)) {
+        let p = count / total;
+        entropy -= p * Math.log2(p);
+    }
+
+    // Normalize entropy
+    return entropy / 5;   // typical range 0–1
+}
 
 
-// ============================================================
-// HOOK: LETTER CLICK
-// ============================================================
-window.METRICS_letterClick = function (letter, spawn_id, clickX, clickY) {
+// FIX: velocity clamp
+function computeVelocityStd() {
+    const velocities = [];
+    for (let i = 1; i < METRICS.mousePositions.length; i++) {
+        const a = METRICS.mousePositions[i];
+        const b = METRICS.mousePositions[i - 1];
 
-    const spawn = window.CAPTCHA_METRICS.spawns.find(s => s.spawn_id == spawn_id);
-    const reaction = spawn ? Date.now() - spawn.spawn_t : null;
+        let dt = (a.t - b.t) / 1000;
+        if (dt < 0.01) dt = 0.01;   // prevent insane speeds
 
-    window.CAPTCHA_METRICS.picked_letters.push({
-        letter,
-        spawn_id,
-        click_x: clickX,
-        click_y: clickY,
-        t: Date.now(),
-        reaction
-    });
-};
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        velocities.push(dist / dt);
+    }
+    return computeStd(velocities);
+}
 
 
-// ============================================================
-// HOOK: MISSED LETTER
-// ============================================================
-window.METRICS_letterMiss = function (letter, spawn_id) {
+// FIX: proper click offset (distance between successive clicks)
+function computeClickOffset() {
+    if (METRICS.clicks.length < 2) return 5; // small neutral offset
 
-    window.CAPTCHA_METRICS.missed_letters.push({
-        letter,
-        spawn_id,
-        spawn_t: Date.now()
-    });
-};
+    let offsets = [];
 
-// ============================================================
-// ENVIRONMENT METRICS (DEVICE + HARDWARE FINGERPRINT)
-// ============================================================
-window.CAPTCHA_METRICS.environment = {
-    screen_width: window.screen.width,
-    screen_height: window.screen.height,
-    device_pixel_ratio: window.devicePixelRatio || null,
-    hardware_concurrency: navigator.hardwareConcurrency || null,
-    max_touch_points: navigator.maxTouchPoints || 0,
-    user_agent: navigator.userAgent || "",
-};
+    for (let i = 1; i < METRICS.clicks.length; i++) {
+        const a = METRICS.clicks[i];
+        const b = METRICS.clicks[i - 1];
+        offsets.push(Math.hypot(a.x - b.x, a.y - b.y));
+    }
 
-// ============================================================
-// HOOK: END OF CHALLENGE
-// ============================================================
-window.METRICS_endChallenge = function () {
-    window.CAPTCHA_METRICS.challenge_end = Date.now();
-};
+    return offsets.reduce((a, b) => a + b, 0) / offsets.length;
+}
 
 
-// ============================================================
-// EXPORT METRICS FOR BACKEND
-// ============================================================
-window.METRICS_export = function () {
-    return JSON.parse(JSON.stringify(window.CAPTCHA_METRICS));
+// ============ FINAL METRIC EXPORT =============
+
+window.collectFinalMetrics = () => {
+    const now = performance.now();
+    METRICS.solveTimes.push(now - METRICS.startTime);
+
+    const hoverAvg =
+        METRICS.hoverDwellTimes.length
+            ? METRICS.hoverDwellTimes.reduce((a, b) => a + b, 0) /
+              METRICS.hoverDwellTimes.length
+            : 150; // neutral typical human dwell
+
+    return {
+        reaction_time_mean_ms: METRICS.reactionTimes[0] || 500,
+
+        solve_time_std_ms: computeStd(METRICS.solveTimes),
+
+        interkey_interval_std_ms: computeStd(METRICS.keyIntervals),
+
+        path_entropy: computePathEntropy(),
+
+        velocity_std_px_per_s: computeVelocityStd(),
+
+        click_offset_avg_px: computeClickOffset(),
+
+        hover_dwell_avg_ms: hoverAvg,
+
+        backspace_count: METRICS.backspaceCount,
+
+        solve_entropy: computeStd(METRICS.solveTimes),
+
+        entry_points_unique: METRICS.entryPoints.size,
+
+        focus_change_events: METRICS.focusEvents,
+
+        swipe_accel_var: 0,
+
+        pause_variance_ms: computeStd(METRICS.pauseIntervals),
+
+        pressure_std: 0,
+
+        fingerprint_entropy: 1,
+
+        overall_variance_score: computeStd(METRICS.solveTimes),
+    };
 };

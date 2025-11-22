@@ -17,7 +17,7 @@ def get_challenge():
     # 4-character alphanumeric word
     word = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     challenge_id = str(uuid.uuid4())
-    CHALLENGES[challenge_id] = {"cid": CID, "sessionId": session_id, "answer": word, "ts": time.time()}
+    CHALLENGES[challenge_id] = {"sessionId": session_id, "answer": word, "ts": time.time()}
     return jsonify({"challengeId": challenge_id, "word": word})
 
 
