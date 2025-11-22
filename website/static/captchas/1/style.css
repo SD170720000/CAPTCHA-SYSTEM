@@ -1,10 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Kablammo&display=swap');
 
-.word-display {
-    font-size: 35px;
-    color: var(--c4);
-    font-family: "Kablammo", system-ui;
-    font-weight: bolder;
+#captcha-canvas {
+    border-radius:8px; 
+    width: 200px;
+    height: 80px;
+    background: var(--c2);
 }
 
 .fall-container {

@@ -16,14 +16,11 @@ if (!window.__CAPTCHA1_LOADED__) {
     let timerInterval = null;
     let countdown = COUNTDOWN;
 
-    // NEW FLAG → timer starts only when first click happens
     let hasTimerStarted = false;
 
-    // expose intervals for main.js
     window.spawnInterval = null;
     window.timerInterval = null;
 
-    // CLEANUP
     window.__CLEANUP__ = function () {
         console.log("CLEANUP RUNNING…");
         if (window.spawnInterval) clearInterval(window.spawnInterval);
@@ -39,9 +36,21 @@ if (!window.__CAPTCHA1_LOADED__) {
         window.userCollectedAnswer = "";
     };
 
-    // =======================================================
-    // MANUAL TIMER START (NO UI)
-    // =======================================================
+    function drawCaptchaOnCanvas(base64) {
+        const canvas = document.getElementById("captcha-canvas");
+        if (!canvas) return;
+
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+
+        img.onload = function () {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+
+        img.src = "data:image/png;base64," + base64;
+    }
+
     function startTimer() {
         if (hasTimerStarted) return;
         hasTimerStarted = true;
@@ -71,53 +80,44 @@ if (!window.__CAPTCHA1_LOADED__) {
         window.timerInterval = timerInterval;
     }
 
-    // =======================================================
-    // INIT CAPTCHA
-    // =======================================================
     async function initCaptcha1() {
         console.log("INIT CAPTCHA-1 RUNNING…");
 
-        const res = await fetch(
-            `${CAPTCHA1_API}/get_challenge?sessionId=${encodeURIComponent(window.sessionId)}`
-        );
+        const res = await fetch(`${CAPTCHA1_API}/get_challenge?sessionId=${encodeURIComponent(window.sessionId)}`);
         const data = await res.json();
 
-        if (!data || !data.challengeId || !data.word) {
+        if (!data || !data.challengeId || !data.svgImg) {
             console.error("Invalid challenge data:", data);
             return;
         }
 
         challengeId = data.challengeId;
-        correctWord = data.word;
 
+        correctWord = data.randomLetters;        // <— IMPORTANT FIX
         window.challengeId = challengeId;
         window.correctWord = correctWord;
         window.userCollectedAnswer = "";
         userCollected = "";
         hasTimerStarted = false;
 
-        // Update UI
-        const targetWordEl = document.getElementById("target-word");
+        drawCaptchaOnCanvas(data.svgImg.split(",")[1]);
+
         const progressEl = document.getElementById("progress");
         const box = document.getElementById("fall-container");
 
-        if (targetWordEl) targetWordEl.innerText = correctWord;
         if (progressEl) progressEl.innerText = "_ _ _ _";
         if (box) box.innerHTML = "";
 
-        // Start falling letters (but NOT timer)
-        spawnInterval = setInterval(spawnLetter, 500);
+        // <———————————— FIXED
+        spawnInterval = setInterval(() => spawnLetter(correctWord), 500);
         window.spawnInterval = spawnInterval;
     }
 
-    // =======================================================
-    // SPAWN LETTERS
-    // =======================================================
-    function spawnLetter() {
+    function spawnLetter(dataset) {
         const box = document.getElementById("fall-container");
         if (!box) return;
 
-        const letter = correctWord[Math.floor(Math.random() * correctWord.length)];
+        const letter = dataset[Math.floor(Math.random() * dataset.length)];
 
         const el = document.createElement("div");
         el.classList.add("falling-letter");
@@ -149,13 +149,13 @@ if (!window.__CAPTCHA1_LOADED__) {
         fall(el, dx, dy, w, h);
     }
 
-    // FALL
     function fall(el, dx, dy, w, h) {
         let x = parseFloat(el.style.left);
         let y = parseFloat(el.style.top);
 
         const t = setInterval(() => {
-            x += dx; y += dy;
+            x += dx;
+            y += dy;
             el.style.left = x + "px";
             el.style.top = y + "px";
 
@@ -166,14 +166,11 @@ if (!window.__CAPTCHA1_LOADED__) {
         }, 40);
     }
 
-    // =======================================================
-    // PICK LETTER - START TIMER HERE
-    // =======================================================
     function pickLetter(el, letter) {
         try { el.remove(); } catch {}
+
         if (userCollected.length >= 4) return;
 
-        // Start timer on FIRST CLICK
         startTimer();
 
         userCollected += letter;
@@ -191,18 +188,12 @@ if (!window.__CAPTCHA1_LOADED__) {
         }
     }
 
-    // =======================================================
-    // PROGRESS UI
-    // =======================================================
     function updateProgress() {
         const p = document.getElementById("progress");
         if (!p) return;
         p.innerText = userCollected.padEnd(4, "_").split("").join(" ");
     }
 
-    // =======================================================
-    // VERIFY API
-    // =======================================================
     async function verifyCaptcha1() {
         try {
             const res = await fetch(`${CAPTCHA1_API}/verify`, {
@@ -216,14 +207,10 @@ if (!window.__CAPTCHA1_LOADED__) {
         }
     }
 
-    // =======================================================
-    // TIMEOUT HANDLER
-    // =======================================================
     window.onTimeout = async () => {
         await sendVerify("timeout");
 
         if (window.__PERFORM_NEXT_ATTEMPT__ === true) {
-
             const c = document.getElementById("captcha-container");
             c.innerHTML = `
             <div style="text-align:center; padding:30px 0;">
@@ -236,9 +223,6 @@ if (!window.__CAPTCHA1_LOADED__) {
         }
     };
 
-    // =======================================================
-    // ON USER FILLED PROGRESS
-    // =======================================================
     window.onUserFilledProgress = () => {
         document.getElementById("final-verify-btn").disabled = false;
     };

@@ -59,7 +59,6 @@ def get_challenge(cid):
 
     # Add metadata placeholder
     session["attempt_metadata"][str(attempt)] = {
-        "generated_answer": None,
         "user_answer": None,
         "metrics": {},
         "status": None,
@@ -80,25 +79,20 @@ def verify(cid):
 
     session_id = data.get("session_id")
     user_answer = (data.get("user_answer") or "").strip().upper()
-    correct_word = (data.get("correct_word") or "").strip().upper()
-    status = data.get("status")        # "passed", "failed", "timeout"
+    status = data.get("status")  
     user_metrics = data.get("metrics") or {}
 
     session = sessions.get(session_id)
     attempt = session["attempt"]
 
-    # Metadata for this attempt
     meta = session["attempt_metadata"].setdefault(str(attempt), {})
-    meta["generated_answer"] = correct_word
     meta["user_answer"] = user_answer
     meta["status"] = status
     meta["metrics"] = user_metrics
     meta["end_timestamp"] = time.time()
     meta["ip_address"] = user_ip
 
-    # ------------------------------------------------
-    # CASE: CAPTCHA PASSED → NOW RUN BEHAVIOUR CHECK
-    # ------------------------------------------------
+    # CASE: CAPTCHA PASSED
     if status == "passed":
         behaviour_result = evaluate_behaviour(BehaviourMetrics(**user_metrics))
 
@@ -111,12 +105,10 @@ def verify(cid):
         return jsonify({
             "status": "passed",
             "completed": True,
-            "behaviour": behaviour_result   # ← returns bot/human score
+            "behaviour": behaviour_result
         })
 
-    # ------------------------------------------------
-    # FAILED ATTEMPT
-    # ------------------------------------------------
+    # FAILED
     session["attempt"] += 1
 
     if session["attempt"] > MAX_ATTEMPTS:
@@ -137,7 +129,7 @@ def verify(cid):
 
 
 # ---------------------------------------
-# DOWNLOAD ALL SESSION DATA AS JSON FILE
+# EXPORT
 # ---------------------------------------
 @app.route("/download_sessions", methods=["GET"])
 def download_sessions():
