@@ -11,7 +11,7 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 CHALLENGES = {}
 
 MAX_WORD_COUNT = 4
-FONT_PATH = "/Users/subhudas1707/Downloads/MainProject2/feature-method-1/captcha-1-api/fonts/Kablammo.ttf"
+FONT_PATH = "captcha-1-api/fonts/Kablammo.ttf"
 
 
 def gen_word():
