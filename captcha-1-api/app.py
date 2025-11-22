@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import random, string, uuid, time, base64
 from PIL import Image, ImageDraw, ImageFont
-import io
+import io, os
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -11,8 +11,9 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 CHALLENGES = {}
 
 MAX_WORD_COUNT = 4
-FONT_PATH = "captcha-1-api/fonts/Kablammo.ttf"
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FONT_PATH = os.path.join(BASE_DIR, "fonts", "Kablammo.ttf")
 
 def gen_word():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=MAX_WORD_COUNT))
