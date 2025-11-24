@@ -20,6 +20,7 @@ if (!window.__CAPTCHA1_LOADED__) {
 
     window.spawnInterval = null;
     window.timerInterval = null;
+    window.challenge_start_time = 0;
 
     window.__CLEANUP__ = function () {
         console.log("CLEANUP RUNNING…");
@@ -108,6 +109,7 @@ if (!window.__CAPTCHA1_LOADED__) {
         userCollected = "";
         hasTimerStarted = false;
 
+        METRICS.start();
         startTimer();
 
         drawCaptchaOnCanvas(data.captcha);
@@ -156,7 +158,7 @@ if (!window.__CAPTCHA1_LOADED__) {
         el.style.left = `${startX}px`;
         el.style.top = `${startY}px`;
 
-        el.onclick = () => pickLetter(el, letter_data.letter);
+        el.onclick = (e) => pickLetter(el, letter_data.letter, e);
 
         box.appendChild(el);
         fall(el, dx, dy, w, h);
@@ -179,12 +181,17 @@ if (!window.__CAPTCHA1_LOADED__) {
         }, 40);
     }
 
-    function pickLetter(el, letter) {
-        try { el.remove(); } catch {}
+    function pickLetter(el, letter, event) {
+        const eleData = el.getBoundingClientRect();
+        METRICS.registerLetterClick(
+            letter, event.clientX, event.clientY,
+            eleData.left + (eleData.width/2),
+            eleData.top + (eleData.height/2)
+        );
+
+        el.remove();
 
         if (userCollected.length >= 4) return;
-
-        // startTimer();
 
         userCollected += letter;
         window.userCollectedAnswer = userCollected;

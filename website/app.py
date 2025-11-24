@@ -79,8 +79,8 @@ def get_challenge(cid):
     session["attempt_metadata"][attempt] = {
         "metrics": {},
         "status": None,
-        "start_timestamp": time.time(),
-        "end_timestamp": None
+        "challenge_start_time": time.time(),
+        "challenge_end_time": None
     }
 
     return jsonify({"attempt": attempt, "max_attempts": MAX_ATTEMPTS})
@@ -93,7 +93,6 @@ def get_challenge(cid):
 def verify(cid):
     data = request.json or {}
     session_id = data.get("session_id")
-    user_answer = (data.get("user_answer") or "").strip().upper()
     status = data.get("status")
     user_metrics = data.get("metrics") or {}
 
@@ -103,7 +102,7 @@ def verify(cid):
     meta = session["attempt_metadata"].setdefault(int(attempt), {})
     meta["status"] = status
     meta["metrics"] = user_metrics
-    meta["end_timestamp"] = time.time()
+    meta["challenge_end_time"] = time.time()
 
     # CASE: CAPTCHA PASSED
     if status == "passed":

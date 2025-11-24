@@ -130,8 +130,6 @@ async function sendVerify(statusOverride = null) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             session_id: sessionId,
-            user_answer: userAnswer,
-            correct_word: correctWord,
             status: status,
             metrics: behaviourMetrics
         })

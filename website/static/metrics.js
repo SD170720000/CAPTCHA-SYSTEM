@@ -1,100 +1,75 @@
-// metrics.js — FIXED VERSION (matches BehaviourMetrics correctly)
+console.log("METRICS loaded");
 
 window.METRICS = {
-    reactionTimes: [],
-    solveTimes: [],
-    keyIntervals: [],
-    mousePositions: [],
-    clicks: [],
-    hoverStart: null,
-    hoverDwellTimes: [],
-    backspaceCount: 0,
-    focusEvents: 0,
-    pauseIntervals: [],
-    entryPoints: new Set(),
-    pressureSamples: [],
-    swipeAccel: [],
-    startTime: null,
-    lastKeyTime: null,
-    lastMouseTime: null
+
+    timings: {
+        total_solve_time_ms: 0,
+    },
+
+    mouse: {
+        path: [],
+        path_length_px: 0,
+        idle_time_ms: 0,
+        avg_speed_px_per_ms: 0,
+        max_speed_px_per_ms: 0,
+        speed_variance: 0,
+        direction_changes: 0
+    },
+
+    clicks: {
+        total_clicks: 0,
+        click_intervals_ms: [],
+        all_clicks: [],
+        picked_letters: [],
+    },
+
+    interaction: {
+        device_type: "",
+        screen_resolution: "",
+        viewport_size: "",
+        fps_estimate: 0,
+        is_headless: false
+    }
+
 };
 
-// ============ BOT DETECTION HELPERS =============
+
+//-----------------------------------------------------------
+// HEADLESS BROWSER CHECK
+//-----------------------------------------------------------
 function isHeadlessBrowser() {
-    return navigator.webdriver === true
-        || /HeadlessChrome/.test(navigator.userAgent)
-        || /PhantomJS/.test(navigator.userAgent)
-        || /Nightmare/.test(navigator.userAgent)
+    return (
+        navigator.webdriver === true ||
+        /HeadlessChrome/.test(navigator.userAgent) ||
+        /PhantomJS/.test(navigator.userAgent) ||
+        /Nightmare/.test(navigator.userAgent)
+    );
 }
 
 
-// ============ EVENT TRACKING =============
 
-window.METRICS.start = () => {
-    METRICS.startTime = performance.now();
+//-----------------------------------------------------------
+// START
+//-----------------------------------------------------------
+METRICS.start = () => {
+
+    window.challenge_start_time = performance.now();
+
+    METRICS.interaction.device_type =
+        navigator.userAgent.includes("Mobile") ? "touch" : "mouse";
+
+    METRICS.interaction.screen_resolution = `${screen.width}x${screen.height}`;
+    METRICS.interaction.viewport_size = `${innerWidth}x${innerHeight}`;
+
+    METRICS.interaction.is_headless = isHeadlessBrowser();
 };
 
 
-// First interaction = reaction time
-document.addEventListener("mousedown", () => {
-    if (METRICS.reactionTimes.length === 0) {
-        METRICS.reactionTimes.push(performance.now() - METRICS.startTime);
-    }
-});
-
-
-// Keystroke timing (we ignore unrealistic values)
-document.addEventListener("keydown", (e) => {
-    const now = performance.now();
-
-    if (METRICS.lastKeyTime) {
-        let delta = now - METRICS.lastKeyTime;
-
-        if (delta > 20 && delta < 800) {    // Ignore 0ms & insane 2s gaps
-            METRICS.keyIntervals.push(delta);
-            if (delta > 80) METRICS.pauseIntervals.push(delta);
-        }
-    }
-
-    METRICS.lastKeyTime = now;
-
-    if (e.key === "Backspace") METRICS.backspaceCount++;
-});
-
-
-// Mouse movement tracking
-document.addEventListener("mousemove", (e) => {
-    const now = performance.now();
-    METRICS.mousePositions.push({ x: e.clientX, y: e.clientY, t: now });
-
-    // FIX: entry points = ±30px from edges (not exactly 0px)
-    if (
-        e.clientX < 30 || e.clientX > window.innerWidth - 30 ||
-        e.clientY < 30 || e.clientY > window.innerHeight - 30
-    ) {
-        METRICS.entryPoints.add(`${e.clientX},${e.clientY}`);
-    }
-});
-
-
-// Hover / dwell detection
-document.addEventListener("mouseover", (e) => {
-    METRICS.hoverStart = performance.now();
-});
-
-document.addEventListener("mouseout", (e) => {
-    if (METRICS.hoverStart) {
-        let dwell = performance.now() - METRICS.hoverStart;
-        if (dwell > 20 && dwell < 2000) {
-            METRICS.hoverDwellTimes.push(dwell);
-        }
-    }
-});
-
-
-// Click offsets (FIXED)
-document.addEventListener("click", (e) => {
-    METRICS.clicks.push({
+//-----------------------------------------------------------
+// MOUSE TRACKING
+//-----------------------------------------------------------
+document.addEventListener("mousemove", e => {
+    METRICS.mouse.path.push({
         x: e.clientX,
         y: e.clientY,
         t: performance.now()
@@ -102,134 +77,110 @@ document.addEventListener("click", (e) => {
 });
 
 
-// Focus changes
-window.addEventListener("blur", () => METRICS.focusEvents++);
-window.addEventListener("focus", () => METRICS.focusEvents++);
+//-----------------------------------------------------------
+// GLOBAL CLICK CAPTURE
+//-----------------------------------------------------------
+document.addEventListener("click", e => {
 
+    let t = performance.now();
 
-// ============ COMPUTATION HELPERS =============
+    METRICS.clicks.total_clicks++;
 
-function computeStd(arr) {
-    if (!arr || arr.length < 2) return 0;
-    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-    const variance =
-        arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
-    return Math.sqrt(variance);
-}
+    METRICS.clicks.all_clicks.push({ x: e.clientX, y: e.clientY, t });
 
-
-// FIX: normalized directional entropy (0–1)
-function computePathEntropy() {
-    if (METRICS.mousePositions.length < 3) return 0;
-
-    const angles = [];
-
-    for (let i = 1; i < METRICS.mousePositions.length; i++) {
-        const a = METRICS.mousePositions[i];
-        const b = METRICS.mousePositions[i - 1];
-
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
-
-        let angle = Math.atan2(dy, dx);
-        angles.push(angle);
+    if (METRICS.clicks.all_clicks.length > 1) {
+        let prev = METRICS.clicks.all_clicks.at(-2);
+        METRICS.clicks.click_intervals_ms.push(t - prev.t);
     }
+});
 
-    const bins = {};
-    angles.forEach(a => {
-        const bucket = Math.round(a * 10) / 10;
-        bins[bucket] = (bins[bucket] || 0) + 1;
+
+//-----------------------------------------------------------
+// LETTER CLICK REGISTRATION
+//-----------------------------------------------------------
+METRICS.registerLetterClick = (letter, x, y, cx, cy) => {
+    METRICS.clicks.picked_letters.push({
+        letter,
+        x,
+        y,
+        cx,
+        cy,
+        t: performance.now()
     });
-
-    const total = angles.length;
-    let entropy = 0;
-
-    for (let count of Object.values(bins)) {
-        let p = count / total;
-        entropy -= p * Math.log2(p);
-    }
-
-    // Normalize entropy
-    return entropy / 5;   // typical range 0–1
-}
+};
 
 
-// FIX: velocity clamp
-function computeVelocityStd() {
-    const velocities = [];
-    for (let i = 1; i < METRICS.mousePositions.length; i++) {
-        const a = METRICS.mousePositions[i];
-        const b = METRICS.mousePositions[i - 1];
-
-        let dt = (a.t - b.t) / 1000;
-        if (dt < 0.01) dt = 0.01;   // prevent insane speeds
-
-        const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        velocities.push(dist / dt);
-    }
-    return computeStd(velocities);
-}
 
 
-// FIX: proper click offset (distance between successive clicks)
-function computeClickOffset() {
-    if (METRICS.clicks.length < 2) return 5; // small neutral offset
-
-    let offsets = [];
-
-    for (let i = 1; i < METRICS.clicks.length; i++) {
-        const a = METRICS.clicks[i];
-        const b = METRICS.clicks[i - 1];
-        offsets.push(Math.hypot(a.x - b.x, a.y - b.y));
-    }
-
-    return offsets.reduce((a, b) => a + b, 0) / offsets.length;
-}
-
-
-// ============ FINAL METRIC EXPORT =============
-
+//-----------------------------------------------------------
+// FINAL DATA PACKAGE
+//-----------------------------------------------------------
 window.collectFinalMetrics = () => {
-    const now = performance.now();
-    METRICS.solveTimes.push(now - METRICS.startTime);
 
-    const hoverAvg =
-        METRICS.hoverDwellTimes.length
-            ? METRICS.hoverDwellTimes.reduce((a, b) => a + b, 0) /
-              METRICS.hoverDwellTimes.length
-            : 150; // neutral typical human dwell
+    METRICS.timings.total_solve_time_ms = performance.now() - window.challenge_start_time;
 
-    return {
-        reaction_time_mean_ms: METRICS.reactionTimes[0] || 500,
+    //----------------------------------------
+    // compute mouse path metrics
+    //----------------------------------------
+    let totalDist = 0;
+    let last = null;
+    let idle = 0;
+    let speeds = [];
+    let direction_changes = 0;
+    let lastDx = null;
+    let lastDy = null;
 
-        solve_time_std_ms: computeStd(METRICS.solveTimes),
+    for(const p of METRICS.mouse.path){
 
-        interkey_interval_std_ms: computeStd(METRICS.keyIntervals),
+        if (last){
 
-        path_entropy: computePathEntropy(),
+            // path length
+            let dx = p.x - last.x;
+            let dy = p.y - last.y;
+            let dist = Math.hypot(dx,dy);
+            totalDist += dist;
 
-        velocity_std_px_per_s: computeVelocityStd(),
+            // speed
+            let dt = p.t - last.t;
+            if(dt > 0){
+                let speed = dist / dt; // px/ms
+                speeds.push(speed);
 
-        click_offset_avg_px: computeClickOffset(),
+                if(speed < 0.01){
+                    idle += dt;
+                }
+            }
 
-        hover_dwell_avg_ms: hoverAvg,
+            // direction change
+            if(lastDx !== null){
+                if( Math.sign(dx) !== Math.sign(lastDx) ||
+                    Math.sign(dy) !== Math.sign(lastDy))  {
+                    direction_changes++;
+                }
+            }
 
-        backspace_count: METRICS.backspaceCount,
+            lastDx = dx;
+            lastDy = dy;
+        }
 
-        solve_entropy: computeStd(METRICS.solveTimes),
+        last = p;
+    }
 
-        entry_points_unique: METRICS.entryPoints.size,
+    METRICS.mouse.path_length_px = totalDist;
+    METRICS.mouse.idle_time_ms = idle;
 
-        focus_change_events: METRICS.focusEvents,
+    if(speeds.length){
+        METRICS.mouse.avg_speed_px_per_ms = speeds.reduce((a,b)=>a+b,0)/speeds.length;
+        METRICS.mouse.max_speed_px_per_ms = Math.max(...speeds);
 
-        swipe_accel_var: 0,
+        let mean = METRICS.mouse.avg_speed_px_per_ms;
+        METRICS.mouse.speed_variance =
+            speeds.reduce((a,b)=>a+(b-mean)*(b-mean),0)/speeds.length;
 
-        pause_variance_ms: computeStd(METRICS.pauseIntervals),
+    }
 
-        pressure_std: 0,
+    METRICS.mouse.direction_changes = direction_changes;
 
-        fingerprint_entropy: 1,
 
-        overall_variance_score: computeStd(METRICS.solveTimes)
-    };
+    return METRICS;
 };
