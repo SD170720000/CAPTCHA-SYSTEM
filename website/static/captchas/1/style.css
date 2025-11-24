@@ -2,7 +2,7 @@
 
 #captcha-canvas {
     border-radius:8px; 
-    width: 200px;
+    width: 300px;
     height: 80px;
     background: var(--c2);
 }
@@ -35,18 +35,13 @@
     top: -40px;
     height: 44px;
     width: 44px;
-    border-radius: 50%;
-    background: var(--c4);
-    color: var(--c1_bright);
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    font-family: "Kablammo", system-ui;
-    font-weight: 400;
-    font-size: 30px;
-    font-style: normal;
     transition: transform 0.2s ease;
+    border-radius: 50%;
+    /* background: var(--c4); */
 }
 
 .progress {

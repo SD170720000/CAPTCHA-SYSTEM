@@ -10,7 +10,7 @@ if (!window.__CAPTCHA1_LOADED__) {
     const CAPTCHA1_API = "http://localhost:5055";
 
     let challengeId = null;
-    let correctWord = "";
+    let randomLetters = [];
     let userCollected = "";
     let spawnInterval = null;
     let timerInterval = null;
@@ -37,18 +37,9 @@ if (!window.__CAPTCHA1_LOADED__) {
     };
 
     function drawCaptchaOnCanvas(base64) {
-        const canvas = document.getElementById("captcha-canvas");
-        if (!canvas) return;
+        const img = document.getElementById("captcha-canvas");
 
-        const ctx = canvas.getContext("2d");
-        const img = new Image();
-
-        img.onload = function () {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        };
-
-        img.src = "data:image/png;base64," + base64;
+        img.src = base64;
     }
 
     function startTimer() {
@@ -86,21 +77,21 @@ if (!window.__CAPTCHA1_LOADED__) {
         const res = await fetch(`${CAPTCHA1_API}/get_challenge?sessionId=${encodeURIComponent(window.sessionId)}`);
         const data = await res.json();
 
-        if (!data || !data.challengeId || !data.svgImg) {
+        if (!data || !data.challengeId || !data.captcha) {
             console.error("Invalid challenge data:", data);
             return;
         }
 
         challengeId = data.challengeId;
+        randomLetters = data.randomLetters;
 
-        correctWord = data.randomLetters;        // <— IMPORTANT FIX
         window.challengeId = challengeId;
-        window.correctWord = correctWord;
+        window.randomLetters = randomLetters;
         window.userCollectedAnswer = "";
         userCollected = "";
         hasTimerStarted = false;
 
-        drawCaptchaOnCanvas(data.svgImg.split(",")[1]);
+        drawCaptchaOnCanvas(data.captcha);
 
         const progressEl = document.getElementById("progress");
         const box = document.getElementById("fall-container");
@@ -108,8 +99,7 @@ if (!window.__CAPTCHA1_LOADED__) {
         if (progressEl) progressEl.innerText = "_ _ _ _";
         if (box) box.innerHTML = "";
 
-        // <———————————— FIXED
-        spawnInterval = setInterval(() => spawnLetter(correctWord), 500);
+        spawnInterval = setInterval(() => spawnLetter(randomLetters), 500);
         window.spawnInterval = spawnInterval;
     }
 
@@ -117,11 +107,15 @@ if (!window.__CAPTCHA1_LOADED__) {
         const box = document.getElementById("fall-container");
         if (!box) return;
 
-        const letter = dataset[Math.floor(Math.random() * dataset.length)];
+        const letter_data = dataset[Math.floor(Math.random() * dataset.length)];
 
-        const el = document.createElement("div");
+        const el = document.createElement("img");
+        el.src = letter_data.img;
         el.classList.add("falling-letter");
-        el.innerText = letter;
+
+        // ---- Random tilt rotation ------------------------
+        const tilt = (Math.random() * 100) - 50;
+        el.style.transform = `rotate(${tilt}deg)`;
 
         const w = box.offsetWidth || 300;
         const h = box.offsetHeight || 200;
@@ -143,7 +137,7 @@ if (!window.__CAPTCHA1_LOADED__) {
         el.style.left = `${startX}px`;
         el.style.top = `${startY}px`;
 
-        el.onclick = () => pickLetter(el, letter);
+        el.onclick = () => pickLetter(el, letter_data.letter);
 
         box.appendChild(el);
         fall(el, dx, dy, w, h);
@@ -199,7 +193,7 @@ if (!window.__CAPTCHA1_LOADED__) {
             const res = await fetch(`${CAPTCHA1_API}/verify`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ challengeId, answer: userCollected })
+                body: JSON.stringify({  challengeId, answer: userCollected })
             });
             return await res.json();
         } catch {

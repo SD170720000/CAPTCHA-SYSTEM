@@ -14,11 +14,18 @@ window.METRICS = {
     entryPoints: new Set(),
     pressureSamples: [],
     swipeAccel: [],
-
     startTime: null,
     lastKeyTime: null,
-    lastMouseTime: null,
+    lastMouseTime: null
 };
+
+// ============ BOT DETECTION HELPERS =============
+function isHeadlessBrowser() {
+    return navigator.webdriver === true
+        || /HeadlessChrome/.test(navigator.userAgent)
+        || /PhantomJS/.test(navigator.userAgent)
+        || /Nightmare/.test(navigator.userAgent)
+}
 
 
 // ============ EVENT TRACKING =============
@@ -223,6 +230,6 @@ window.collectFinalMetrics = () => {
 
         fingerprint_entropy: 1,
 
-        overall_variance_score: computeStd(METRICS.solveTimes),
+        overall_variance_score: computeStd(METRICS.solveTimes)
     };
 };

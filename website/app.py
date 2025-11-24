@@ -79,7 +79,7 @@ def verify(cid):
 
     session_id = data.get("session_id")
     user_answer = (data.get("user_answer") or "").strip().upper()
-    status = data.get("status")  
+    status = data.get("status")
     user_metrics = data.get("metrics") or {}
 
     session = sessions.get(session_id)

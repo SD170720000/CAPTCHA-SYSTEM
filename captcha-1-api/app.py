@@ -1,51 +1,109 @@
-# captcha1_api/app.py
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import random, string, uuid, time, base64
 from PIL import Image, ImageDraw, ImageFont
 import io, os
 
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 CHALLENGES = {}
-
 MAX_WORD_COUNT = 4
-
+SIZE = 60
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_PATH = os.path.join(BASE_DIR, "fonts", "Kablammo.ttf")
+
 
 def gen_word():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=MAX_WORD_COUNT))
 
 
-def make_distorted_png(word):
-    img = Image.new("RGB", (150, 60), (255, 255, 255))
-    d = ImageDraw.Draw(img)
+#############################################
+# MAKE LETTER TILE — NOISE FILL
+#############################################
+def make_letter_tile(letter, color=(0,0,0)):
+    img = Image.new("RGBA",(SIZE, SIZE),(255,255,255,0))
 
-    size = random.randint(28, 36)
-    font = ImageFont.truetype(FONT_PATH, size)
+    # letter interior mask
+    mask = Image.new("L",(SIZE, SIZE),0)
+    dmask = ImageDraw.Draw(mask)
+    font = ImageFont.truetype(FONT_PATH, 42)
 
-    # random noise
-    for _ in range(150):
-        d.point(
-            (random.randint(0,149), random.randint(0,59)),
-            fill=(random.randint(0,200),random.randint(0,200),random.randint(0,200))
-        )
+    dmask.text((20,0), letter, font=font, fill=255)
 
-    d.text((40,10), word, font=font, fill=(48, 115, 240))
+    # fill interior with granular noise
+    for _ in range(4000):
+        x = random.randint(0, SIZE-1)
+        y = random.randint(0, SIZE-1)
+
+        if mask.getpixel((x,y)) > 180:
+            img.putpixel(
+                (x,y),
+                (
+                    min(color[0] + random.randint(-20,20),255),
+                    min(color[1] + random.randint(-20,20),255),
+                    min(color[2] + random.randint(-20,20),255),
+                    240
+                )
+            )
+
+    return img
+
+
+
+#############################################
+# UNIFIED STATIC + GIF GENERATOR
+#############################################
+def make_captcha_media(word, animated=False):
+
+    FRAMES = 4
+    DURATION = 120
+
+    frames = []
+
+    for _ in range(FRAMES):
+
+        final = Image.new("RGB", (260, 80), (255,255,255))
+        d = ImageDraw.Draw(final)
+
+        # paste tiles
+        x = 10
+        for ch in word:
+            tile = make_letter_tile(ch)
+            final.paste(tile, (x, random.randint(0,25)), tile)
+            x += SIZE
+
+        frames.append(final)
 
     buf = io.BytesIO()
-    img.save(buf, format='webp')
-    b64 = base64.b64encode(buf.getvalue()).decode('utf8')
-    return f"data:image/png;base64,{b64}"
+    
+    # static WEBP
+    if not animated:
+        frames[0].save(buf, format="WEBP")
+    else:
+        # animated GIF
+        frames[0].save(
+            buf,
+            format='webp',
+            save_all=True,
+            append_images=frames[1:],
+            duration=DURATION,
+            optimize=False,
+            loop=0
+        )
+
+    return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+
+#############################################
+# API
+#############################################
 @app.route("/get_challenge")
 def get_challenge():
+
     session_id = request.args.get("sessionId")
-    if not session_id:
-        return jsonify({"error": "sessionId required"}), 400
 
     word = gen_word()
     challenge_id = str(uuid.uuid4())
@@ -56,17 +114,26 @@ def get_challenge():
         "ts": time.time()
     }
 
-    img64 = make_distorted_png(word)
+    main_img = make_captcha_media(word, animated=True)
 
-    shuffled_letters = list(word)
-    random.shuffle(shuffled_letters)
-    noise = ''.join(random.choices(string.ascii_uppercase + string.digits, k=MAX_WORD_COUNT-1))
+
+    letters = list(word)
+    random.shuffle(letters)
+
+    payload = []
+    for c in letters:
+        tile = make_letter_tile(c)
+        buf = io.BytesIO()
+        tile.save(buf, format="WEBP")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        payload.append({"letter": c, "img": f"data:image/webp;base64,{b64}"})
+
 
     return jsonify({
         "challengeId": challenge_id,
-        "svgImg": img64,
-        "type": "img",
-        "randomLetters": "".join(shuffled_letters)+noise
+        "captcha": main_img,
+        "randomLetters": payload,
+        "type": "img"
     })
 
 
@@ -75,15 +142,8 @@ def verify():
     data = request.json or {}
     challenge_id = data.get("challengeId")
     answer = (data.get("answer") or "").strip().upper()
-
-    if challenge_id not in CHALLENGES:
-        return jsonify({"error": "invalid challengeId"}), 400
-
-    expected = CHALLENGES[challenge_id]["answer"]
-
-    return jsonify({
-        "status": "passed" if answer == expected else "failed"
-    })
+    expected = CHALLENGES.get(challenge_id,{}).get("answer")
+    return {"status": "passed" if answer == expected else "failed"}
 
 
 if __name__ == "__main__":
