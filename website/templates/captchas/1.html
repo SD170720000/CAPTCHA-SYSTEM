@@ -1,9 +1,11 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='captchas/1/style.css') }}">
 
 <div>
+    <p id="captcha-instruction">Click the falling letters to solve the captcha</p>
     <img id="captcha-canvas">
-
     <div id="fall-container" class="fall-container"></div>
-
+    <div id="timer-bar-wrapper">
+        <div id="timer-bar"></div>
+    </div>
     <div id="progress" class="progress">_ _ _ _</div>
 </div>

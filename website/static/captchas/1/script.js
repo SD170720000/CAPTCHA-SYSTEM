@@ -49,9 +49,24 @@ if (!window.__CAPTCHA1_LOADED__) {
         countdown = COUNTDOWN;
 
         timerInterval = setInterval(() => {
+            
+            const bar = document.getElementById("timer-bar");
+            
+            if (bar) {
+                const percent = ((countdown-1) / COUNTDOWN) * 100
+                bar.style.width = `${percent}%`;
+
+                if (percent <= 50 && percent > 25) {
+                    bar.style.background = "var(--c6)";
+                }else if (percent <= 25) {
+                    bar.style.background = "var(--c7)";
+                }
+            }
+
             countdown--;
 
-            if (countdown <= 0) {
+            if (countdown < 0) {
+
                 clearInterval(timerInterval);
                 clearInterval(spawnInterval);
 
@@ -66,7 +81,9 @@ if (!window.__CAPTCHA1_LOADED__) {
                     }
                 }
             }
+
         }, 1000);
+
 
         window.timerInterval = timerInterval;
     }
@@ -90,6 +107,8 @@ if (!window.__CAPTCHA1_LOADED__) {
         window.userCollectedAnswer = "";
         userCollected = "";
         hasTimerStarted = false;
+
+        startTimer();
 
         drawCaptchaOnCanvas(data.captcha);
 
@@ -165,7 +184,7 @@ if (!window.__CAPTCHA1_LOADED__) {
 
         if (userCollected.length >= 4) return;
 
-        startTimer();
+        // startTimer();
 
         userCollected += letter;
         window.userCollectedAnswer = userCollected;
@@ -208,8 +227,8 @@ if (!window.__CAPTCHA1_LOADED__) {
             const c = document.getElementById("captcha-container");
             c.innerHTML = `
             <div style="text-align:center; padding:30px 0;">
-                <h2 style="color:red;">Captcha Timed Out !!!</h2>
-                <p>You took more than ${COUNTDOWN} seconds.</p>
+                <h2 style="color:var(--c7);">Captcha Timed Out !!!</h2>
+                <p style="color: var(--c2)">You took more than ${COUNTDOWN} seconds.</p>
                 <button id="retry-btn" class="final-btn">Retry</button>
             </div>
             `;

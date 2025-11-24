@@ -14,16 +14,45 @@ document.getElementById("start-btn").onclick = async () => {
     const res = await fetch("/start_session", { method: "POST" });
     const data = await res.json();
 
-    sessionId = data.session_id;
-    window.sessionId = sessionId;
-
     document.getElementById("start-btn").style.display = "none";
     document.getElementById("main-desc").style.display = "none";
     document.getElementById("captcha-section").style.display = "block";
 
-    if (window.METRICS?.start) window.METRICS.start();
+    if(data.error === "locked"){
+        remaining = data.retry_after_seconds;
+        const container = document.getElementById("captcha-section");
+        container.style.display = "block";
+        container.innerHTML = `
+        <div style="text-align:center; padding:30px 0;">
+            <h2 style="color:var(--c7);">Locked !!!</h2>
+            <p style="color: var(--c2)">You have exhausted your attempts</p>
+            <p style="color: var(--c2)">Please retry after sometime.<br>
+            <p style="color: var(--c2)">Remaining Time:
+                <span id="remaining-counter" style="color: var(--c3)"> ${remaining}s</span></p>
+        </div>
+        `;
+        const t = setInterval(() => {
+            remaining--;
 
-    await loadCaptcha();
+            const remaining_timer_text = document.getElementById("remaining-counter");
+            remaining_timer_text.innerText = `${remaining}s`;
+
+            if(remaining <= 0){
+                clearInterval(t);
+                location.reload();
+            }
+            return
+        }, 1000);
+
+    } else {
+        sessionId = data.session_id;
+        window.sessionId = sessionId;
+
+        if (window.METRICS?.start) window.METRICS.start();
+
+        await loadCaptcha();
+    }
+
 };
 
 //#############################################################
@@ -121,10 +150,12 @@ async function sendVerify(statusOverride = null) {
         if (window.timerInterval) clearInterval(window.timerInterval);
         const container = document.getElementById("captcha-container");
         document.getElementById("final-verify-btn").disabled = true;
+
+        const attempt_val = (3-data.next_attempt)+1
         container.innerHTML = `
         <div style="text-align:center; padding:30px 0;">
-            <h2 style="color:red;">Failed Attempt !!!</h2>
-            <p>You have ${3-data.next_attempt+1} attempts left</p>
+            <h2 style="color:var(--c7);">Failed Attempt !!!</h2>
+            <p style="color: var(--c2)">You have ${attempt_val} attemp${attempt_val>1?"s":""} left</p>
             <button id="retry-btn" class="final-btn">Retry</button>
         </div>
         `;
@@ -144,9 +175,9 @@ async function sendVerify(statusOverride = null) {
         document.getElementById("final-verify-btn").disabled = true;
         container.innerHTML = `
         <div style="text-align:center; padding:30px 0;">
-            <h2 style="color:red;">Attempts Exhausted !!!</h2>
-            <p>You used all your attempts</p>
-            <p>Please retry after 15 mins</p>
+            <h2 style="color:var(--c7);">Attempts Exhausted !!!</h2>
+            <p style="color: var(--c2)">You have used all your attempts</p>
+            <p style="color: var(--c2)">Please retry after 15 mins</p>
         </div>
         `;
     }
@@ -168,7 +199,7 @@ function showSuccessUI(data) {
     container.innerHTML = `
         <div style="text-align:center; padding:30px 0;">
             <h2 style="color:green;">Successfull Attempt!</h2>
-            <p style="color:${data.behaviour.is_human ? "green" : "red"};">
+            <p style="color:${data.behaviour.is_human ? "green" : "var(--c7)"};">
                 ${data.behaviour.is_human ? "Human Detected!" : "Bot Detected!"}
                 (score: ${data.behaviour.score})
             </p>

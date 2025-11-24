@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600&family=Ubuntu:wght@400;500;700&display=swap');
 
-:root {    
+:root {
     --f1: 'Ubuntu', sans-serif;
     --f2: 'Work Sans', sans-serif;
     --fs1: 14px;
@@ -13,6 +13,9 @@
     --c3: rgb(22, 38, 54);
     --c4: hsl(217, 91%, 60%);
     --c5: hsl(217, 91%, 40%);
+    --c6: rgb(255, 178, 25);
+    --c7: rgb(255, 25, 71);
+
 }
 
 body {
@@ -49,7 +52,6 @@ body {
     margin: 10px 0 20px 0;
     color: #555;
 }
-
 
 button {
     background: var(--c4);

@@ -10,10 +10,11 @@
 .fall-container {
     height: 300px;
     border: 1px solid #ddd;
-    border-radius: 10px;
+    border-radius: 10px 10px 0 0;
     background-size: cover;
     overflow: hidden;
     position: relative;
+    border-bottom: 0;
 }
 
 .fall-container::before {
@@ -33,8 +34,8 @@
 .falling-letter {
     position: absolute;
     top: -40px;
-    height: 44px;
-    width: 44px;
+    height: 50px;
+    width: 50px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -48,4 +49,20 @@
     margin: 15px 0;
     font-size: var(--fs4);
     letter-spacing: 8px;
+}
+
+#timer-bar-wrapper {
+    width: 100%;
+    height: 5px;
+    border-radius: 0 0 6px 6px;
+    background:#ddd;
+    /* margin:10px 0; */
+    overflow:hidden;
+}
+
+#timer-bar {
+    width:100%;
+    height:100%;
+    background: var(--c4);
+    transition: width 1s linear, background 1s linear;
 }

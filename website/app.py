@@ -8,9 +8,11 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)
 
 sessions = {}
+locked_ips = {}
 
 MAX_ATTEMPTS = 3
 CHALLENGE_TIMEOUT = 30  # seconds
+LOCKIN_PERIOD = 15 # minutes
 
 
 @app.route("/")
@@ -28,14 +30,30 @@ def load_captcha_template(cid):
 # ---------------------------------------
 @app.route("/start_session", methods=["POST"])
 def start_session():
+    user_ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+
+    if user_ip != "unknown" and user_ip in locked_ips:
+        if time.time() < locked_ips[user_ip]:
+            remaining = int(locked_ips[user_ip] - time.time())
+
+            return jsonify({
+                "error": "locked",
+                "retry_after_seconds": remaining
+            }), 403
+        else:
+            # auto unlock
+            locked_ips.pop(user_ip, None)
+
     session_id = str(uuid.uuid4())
+
     sessions[session_id] = {
         "attempt": 1,
         "max_attempts": MAX_ATTEMPTS,
         "attempt_metadata": {},
         "created_timestamp": time.time(),
         "completed": False,
-        "final_result": None
+        "final_result": None,
+        "ip_address": user_ip
     }
     return jsonify({"session_id": session_id, "attempt": 1})
 
@@ -58,8 +76,7 @@ def get_challenge(cid):
     attempt = session["attempt"]
 
     # Add metadata placeholder
-    session["attempt_metadata"][str(attempt)] = {
-        "user_answer": None,
+    session["attempt_metadata"][attempt] = {
         "metrics": {},
         "status": None,
         "start_timestamp": time.time(),
@@ -75,8 +92,6 @@ def get_challenge(cid):
 @app.route("/verify/<cid>", methods=["POST"])
 def verify(cid):
     data = request.json or {}
-    user_ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
-
     session_id = data.get("session_id")
     user_answer = (data.get("user_answer") or "").strip().upper()
     status = data.get("status")
@@ -85,12 +100,10 @@ def verify(cid):
     session = sessions.get(session_id)
     attempt = session["attempt"]
 
-    meta = session["attempt_metadata"].setdefault(str(attempt), {})
-    meta["user_answer"] = user_answer
+    meta = session["attempt_metadata"].setdefault(int(attempt), {})
     meta["status"] = status
     meta["metrics"] = user_metrics
     meta["end_timestamp"] = time.time()
-    meta["ip_address"] = user_ip
 
     # CASE: CAPTCHA PASSED
     if status == "passed":
@@ -114,6 +127,7 @@ def verify(cid):
     if session["attempt"] > MAX_ATTEMPTS:
         session["completed"] = True
         session["final_result"] = "failed"
+        locked_ips[session["ip_address"]] = time.time() + LOCKIN_PERIOD * 60
 
         print("SESSION FAILED:", session)
 
