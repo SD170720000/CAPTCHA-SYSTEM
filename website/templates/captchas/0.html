@@ -1,0 +1,19 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='captchas/0/style.css') }}">
+
+<div class="verify-card">
+    <div class="image-wrap">
+        <img id="syco-img" alt="Verification scene">
+    </div>
+
+    <div class="section-title">STATEMENT VERIFICATION</div>
+    <p id="syco-prompt" class="syco-prompt">Loading...</p>
+
+    <div class="choice-row">
+        <button id="syco-true" class="choice-btn true-btn">✔ TRUE</button>
+        <button id="syco-false" class="choice-btn false-btn">✘ FALSE</button>
+    </div>
+
+    <p id="syco-helper" class="syco-helper">
+        Decide if the statement matches the image. No flattery—just facts.
+    </p>
+</div>

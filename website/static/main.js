@@ -50,15 +50,49 @@ document.getElementById("start-btn").onclick = async () => {
 
         if (window.METRICS?.start) window.METRICS.start();
 
-        await loadCaptcha();
+        await loadCaptcha0();
     }
 
 };
 
 //#############################################################
+// LOAD CAPTCHA-0 (pre-check)
+//#############################################################
+async function loadCaptcha0() {
+    if (window.__CLEANUP__) window.__CLEANUP__();
+
+    const step = document.getElementById("step-label");
+    const btn = document.getElementById("final-verify-btn");
+    if (step) step.innerText = "Step 1/2 — Statement verification";
+    if (btn) {
+        btn.disabled = true;
+        btn.style.display = "none";
+        btn.onclick = null;
+    }
+
+    const container = document.getElementById("captcha-container");
+    container.innerHTML = "";
+
+    const html = await fetch("/load_captcha/0").then(r => r.text());
+    container.innerHTML = html;
+
+    const s = document.createElement("script");
+    s.src = "/static/captchas/0/script.js";
+    s.onload = () => {
+        if (typeof window.initCaptcha0 === "function") {
+            window.initCaptcha0({
+                onPassed: () => loadCaptcha1(),
+                onFailed: () => loadCaptcha0()
+            });
+        }
+    };
+    container.appendChild(s);
+}
+
+//#############################################################
 // LOAD CAPTCHA FRAME
 //#############################################################
-async function loadCaptcha() {
+async function loadCaptcha1() {
     if (window.__CLEANUP__) window.__CLEANUP__();
 
     const attemptInit = await fetch(
@@ -76,6 +110,14 @@ async function loadCaptcha() {
     const container = document.getElementById("captcha-container");
     container.innerHTML = "";
 
+    const btn = document.getElementById("final-verify-btn");
+    if (btn) {
+        btn.disabled = true;
+        btn.style.display = "block";
+        btn.innerText = "Verify";
+        btn.onclick = () => sendVerify(null);
+    }
+
     const html = await fetch("/load_captcha/1").then(r => r.text());
     container.innerHTML = html;
 
@@ -87,6 +129,11 @@ async function loadCaptcha() {
     container.appendChild(s);
 }
 
+// keep legacy name for captcha-1 script callbacks
+async function loadCaptcha() {
+    return loadCaptcha1();
+}
+
 //#############################################################
 // ATTEMPT LABEL
 //#############################################################
@@ -94,13 +141,7 @@ function loadAttemptUI(attempt) {
     const step = document.getElementById("step-label");
     const btn = document.getElementById("final-verify-btn");
 
-    if (attempt === 1) {
-        step.innerText = "";
-        btn.disabled = true;
-        return;
-    }
-
-    step.innerText = `Attempt ${attempt}/3`;
+    step.innerText = `Step 2/2 — Attempt ${attempt}/3`;
     btn.disabled = true;
 }
 
@@ -157,7 +198,7 @@ async function sendVerify(statusOverride = null) {
             <button id="retry-btn" class="final-btn">Retry</button>
         </div>
         `;
-        document.getElementById("retry-btn").onclick = () => loadCaptcha();
+        document.getElementById("retry-btn").onclick = () => loadCaptcha1();
     }
 
     if (!data.completed && data.next_attempt) {
@@ -207,10 +248,3 @@ function showSuccessUI(data) {
 
     document.getElementById("resolve-btn").onclick = () => location.reload();
 }
-
-//#############################################################
-// VERIFY BUTTON
-//#############################################################
-document.getElementById("final-verify-btn").onclick = () => sendVerify(null);
-
-
