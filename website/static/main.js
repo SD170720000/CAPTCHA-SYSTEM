@@ -8,12 +8,123 @@ window.__PERFORM_NEXT_ATTEMPT__ = false;
 window.__CAPTCHA_COMPLETED__ = false;
 
 //#############################################################
+// METRICS (minimal: mouse moves/clicks/time/result per phase)
+//#############################################################
+const metrics = {
+    startedAt: Date.now(),
+    device: collectDeviceFingerprint(),
+    sessionId: null,
+    currentStep: "intro",
+    intro: { mouse_moves: 0, clicks: 0, startedAt: Date.now(), endedAt: null },
+    captcha0: { mouse_moves: 0, clicks: 0, startedAt: null, endedAt: null, result: null, time_taken_ms: null },
+    captcha1_attempts: []
+};
+
+window.__metrics__ = metrics;
+
+function collectDeviceFingerprint() {
+    const nav = navigator || {};
+    return {
+        userAgent: nav.userAgent || "",
+        platform: nav.platform || "",
+        language: nav.language || "",
+        hardwareConcurrency: nav.hardwareConcurrency || null,
+        vendor: nav.vendor || "",
+        devicePixelRatio: window.devicePixelRatio || 1,
+        screenX: typeof window.screenX !== "undefined" ? window.screenX : (window.screenLeft || 0),
+        screenY: typeof window.screenY !== "undefined" ? window.screenY : (window.screenTop || 0),
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        outerWidth: window.outerWidth,
+        outerHeight: window.outerHeight
+    };
+}
+
+function setCurrentStep(stepName) {
+    metrics.currentStep = stepName;
+    const now = Date.now();
+    if (stepName === "captcha0") {
+        if (!metrics.captcha0.startedAt) metrics.captcha0.startedAt = now;
+    } else if (stepName === "captcha1") {
+        // ensure current attempt exists
+        if (!metrics.captcha1_attempts.length) {
+            metrics.captcha1_attempts.push({
+                attempt: window.__CURRENT_ATTEMPT__ || 1,
+                mouse_moves: 0,
+                clicks: 0,
+                startedAt: now,
+                endedAt: null,
+                result: null,
+                time_taken_ms: null
+            });
+        } else {
+            const last = metrics.captcha1_attempts[metrics.captcha1_attempts.length - 1];
+            if (!last.startedAt) last.startedAt = now;
+        }
+    } else {
+        if (!metrics.intro.startedAt) metrics.intro.startedAt = now;
+    }
+}
+
+function getActiveBucket() {
+    if (metrics.currentStep === "captcha0") return metrics.captcha0;
+    if (metrics.currentStep === "captcha1") {
+        if (!metrics.captcha1_attempts.length) {
+            setCurrentStep("captcha1");
+        }
+        return metrics.captcha1_attempts[metrics.captcha1_attempts.length - 1];
+    }
+    return metrics.intro;
+}
+
+function recordMove() {
+    const bucket = getActiveBucket();
+    bucket.mouse_moves += 1;
+}
+
+function recordClick() {
+    const bucket = getActiveBucket();
+    bucket.clicks += 1;
+}
+
+function markResult(stepName, result) {
+    const now = Date.now();
+    if (stepName === "captcha0") {
+        metrics.captcha0.result = result;
+        metrics.captcha0.endedAt = now;
+        metrics.captcha0.time_taken_ms = metrics.captcha0.startedAt ? now - metrics.captcha0.startedAt : null;
+    }
+    if (stepName === "captcha1" && metrics.captcha1_attempts.length) {
+        const last = metrics.captcha1_attempts[metrics.captcha1_attempts.length - 1];
+        last.result = result;
+        last.endedAt = now;
+        last.time_taken_ms = last.startedAt ? now - last.startedAt : null;
+    }
+}
+
+window.addEventListener("pointermove", () => recordMove(), { passive: true });
+window.addEventListener("click", () => recordClick(), { passive: true });
+
+function buildTelemetryPayload(finalStatus) {
+    return {
+        sessionId: metrics.sessionId,
+        device: metrics.device,
+        intro: metrics.intro,
+        captcha0: metrics.captcha0,
+        captcha1_attempts: metrics.captcha1_attempts,
+        finalStatus,
+        collectedAt: Date.now()
+    };
+}
+
+//#############################################################
 // START SESSION
 //#############################################################
 document.getElementById("start-btn").onclick = async () => {
     const res = await fetch("/start_session", { method: "POST" });
     const data = await res.json();
 
+    metrics.sessionId = data.session_id || null;
     document.getElementById("start-btn").style.display = "none";
     document.getElementById("main-desc").style.display = "none";
     document.getElementById("captcha-section").style.display = "block";
@@ -47,6 +158,7 @@ document.getElementById("start-btn").onclick = async () => {
     } else {
         sessionId = data.session_id;
         window.sessionId = sessionId;
+        setCurrentStep("captcha0");
 
         await loadCaptcha0();
     }
@@ -61,6 +173,7 @@ async function loadCaptcha0() {
 
     const step = document.getElementById("step-label");
     const btn = document.getElementById("final-verify-btn");
+    setCurrentStep("captcha0");
     if (step) step.innerText = "Step 1/2 — Statement verification";
     if (btn) {
         btn.disabled = true;
@@ -102,6 +215,17 @@ async function loadCaptcha1() {
         return;
     }
 
+    // new attempt metrics bucket
+    metrics.captcha1_attempts.push({
+        attempt: attemptData.attempt,
+        mouse_moves: 0,
+        clicks: 0,
+        startedAt: Date.now(),
+        endedAt: null,
+        result: null,
+        time_taken_ms: null
+    });
+    setCurrentStep("captcha1");
     loadAttemptUI(attemptData.attempt);
 
     window.__CURRENT_ATTEMPT__ = attemptData.attempt;
@@ -169,7 +293,8 @@ async function sendVerify(statusOverride = null) {
         body: JSON.stringify({
             session_id: sessionId,
             status: status,
-            user_answer: userAnswer
+            user_answer: userAnswer,
+            telemetry: buildTelemetryPayload(status)
         })
     });
 
@@ -177,12 +302,14 @@ async function sendVerify(statusOverride = null) {
 
     if (data.status === "passed") {
         window.__CAPTCHA_COMPLETED__ = true;
+        markResult("captcha1", "passed");
 
         if (window.showSuccessUI)
             window.showSuccessUI(data);
 
         return;
     } else if (data.status === "failed") {
+        markResult("captcha1", "failed");
         if (window.timerInterval) clearInterval(window.timerInterval);
         const container = document.getElementById("captcha-container");
         document.getElementById("final-verify-btn").disabled = true;
@@ -232,12 +359,16 @@ function showSuccessUI(data) {
     const container = document.getElementById("captcha-container");
     document.getElementById("final-verify-btn").disabled = true;
 
+    const behaviour = (data && data.behaviour) || {};
+    const isHuman = typeof behaviour.is_human === "boolean" ? behaviour.is_human : true;
+    const score = typeof behaviour.score !== "undefined" ? behaviour.score : "n/a";
+
     container.innerHTML = `
         <div style="text-align:center; padding:30px 0;">
             <h2 style="color:green;">Successfull Attempt!</h2>
-            <p style="color:${data.behaviour.is_human ? "green" : "var(--c7)"};">
-                ${data.behaviour.is_human ? "Human Detected!" : "Bot Detected!"}
-                (score: ${data.behaviour.score})
+            <p style="color:${isHuman ? "green" : "var(--c7)"};">
+                ${isHuman ? "Human Detected!" : "Bot Detected!"}
+                (score: ${score})
             </p>
             <button id="resolve-btn" class="final-btn">Resolve Captcha</button>
         </div>

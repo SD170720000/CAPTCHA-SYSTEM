@@ -110,6 +110,7 @@ def verify(cid):
     session_id = data.get("session_id")
     status = data.get("status")
     user_answer = data.get("user_answer")
+    telemetry = data.get("telemetry")
 
     session = sessions.get(session_id)
     if not session:
@@ -121,6 +122,11 @@ def verify(cid):
     meta["status"] = status
     meta["user_answer"] = user_answer
     meta["challenge_end_time_ms"] = int(time.time() * 1000)
+    if telemetry:
+        meta["telemetry"] = telemetry
+        if telemetry.get("device") and "device" not in session:
+            session["device"] = telemetry.get("device")
+    meta["result_from_backend"] = status
 
     # CASE: CAPTCHA PASSED
     if status == "passed":
@@ -135,7 +141,8 @@ def verify(cid):
 
         return jsonify({
             "status": "passed",
-            "completed": True
+            "completed": True,
+            "session_final_result": session.get("final_result")
         })
 
     # FAILED
@@ -152,14 +159,19 @@ def verify(cid):
 
         persist_session_to_disk(session_id, session)
 
-        return jsonify({"status": status, "completed": True})
+        return jsonify({
+            "status": status,
+            "completed": True,
+            "session_final_result": session.get("final_result")
+        })
 
     print("ATTEMPT FAILED:", session)
 
     return jsonify({
         "status": status,
         "completed": False,
-        "next_attempt": session["attempt"]
+        "next_attempt": session["attempt"],
+        "session_final_result": session.get("final_result")
     })
 
 

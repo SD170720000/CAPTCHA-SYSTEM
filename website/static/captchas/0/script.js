@@ -8,6 +8,7 @@ let onFailed = null;
 let btnTrue = null;
 let btnFalse = null;
 let challengeData0 = null;
+const sharedMetrics = window.__metrics__ || null;
 
 window.__CLEANUP__ = function () {
     if (btnTrue) btnTrue.onclick = null;
@@ -42,12 +43,26 @@ async function initCaptcha0(opts = {}) {
 
     btnTrue.onclick = () => verifyCaptcha0(true);
     btnFalse.onclick = () => verifyCaptcha0(false);
+
+    if (sharedMetrics) {
+        sharedMetrics.captcha0.challengeId = challengeId0;
+        sharedMetrics.captcha0.prompt = data.prompt;
+        sharedMetrics.captcha0.imageUrl = data.imageUrl;
+    }
 }
 
 
 // ---------------------------------------------------
 async function verifyCaptcha0(choice) {
     if (!challengeId0) return;
+
+    if (sharedMetrics) {
+        sharedMetrics.captcha0.firstChoiceTs = sharedMetrics.captcha0.firstChoiceTs || Date.now();
+        sharedMetrics.captcha0.choice = choice;
+        sharedMetrics.captcha0.time_taken_ms = sharedMetrics.captcha0.startedAt
+            ? sharedMetrics.captcha0.firstChoiceTs - sharedMetrics.captcha0.startedAt
+            : null;
+    }
 
     const res = await fetch(`${CAPTCHA0_API}/verify`, {
         method: "POST",

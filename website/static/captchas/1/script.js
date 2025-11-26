@@ -1,4 +1,5 @@
 // ===========================================================
+
 // CAPTCHA-1 SCRIPT (SAFE FROM DUPLICATE LOADING)
 // ===========================================================
 if (!window.__CAPTCHA1_LOADED__) {
@@ -10,13 +11,18 @@ if (!window.__CAPTCHA1_LOADED__) {
     const CAPTCHA1_API = "http://localhost:5055";
 
     let challengeId = null;
-    let randomLetters = [];
-    let userCollected = "";
+    let rawLetters = [];
+    let normalizedLetters = [];
+    let letterMetaByToken = {};
+    let userCollectedTokens = [];
+    let userCollectedLetters = [];
     let spawnInterval = null;
     let timerInterval = null;
     let countdown = COUNTDOWN;
 
     let hasTimerStarted = false;
+
+    const sharedMetrics = window.__metrics__ || null;
 
     window.spawnInterval = null;
     window.timerInterval = null;
@@ -32,9 +38,10 @@ if (!window.__CAPTCHA1_LOADED__) {
 
         spawnInterval = null;
         timerInterval = null;
-        userCollected = "";
+        userCollectedTokens = [];
+        userCollectedLetters = [];
         hasTimerStarted = false;
-        window.userCollectedAnswer = "";
+        window.userCollectedAnswer = { tokens: [], letters: [] };
     };
 
     function drawCaptchaOnCanvas(base64) {
@@ -89,6 +96,34 @@ if (!window.__CAPTCHA1_LOADED__) {
         window.timerInterval = timerInterval;
     }
 
+    async function hashStringSHA256(str) {
+        const data = new TextEncoder().encode(str);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function normalizeLetters(dataset) {
+        const result = [];
+        const metaMap = {};
+
+        for (const entry of dataset || []) {
+            // Prefer server-provided token/hash; fallback to hashing image data.
+            const token = entry.letter_hash || entry.token || await hashStringSHA256(entry.img || "");
+            metaMap[token] = {
+                img: entry.img,
+                // keep letter privately for backward compatibility; not exposed in UI
+                letter: entry.letter || null
+            };
+            result.push({
+                token,
+                img: entry.img
+            });
+        }
+
+        return { normalized: result, metaMap };
+    }
+
     async function initCaptcha1() {
         console.log("INIT CAPTCHA-1 RUNNING…");
 
@@ -101,15 +136,28 @@ if (!window.__CAPTCHA1_LOADED__) {
         }
 
         challengeId = data.challengeId;
-        randomLetters = data.randomLetters;
+        rawLetters = data.randomLetters;
+
+        // Normalize dataset to avoid exposing raw letters on the client.
+        const { normalized, metaMap } = await normalizeLetters(rawLetters);
+        normalizedLetters = normalized;
+        letterMetaByToken = metaMap;
 
         window.challengeId = challengeId;
-        window.randomLetters = randomLetters;
-        window.userCollectedAnswer = "";
-        userCollected = "";
+        window.randomLetters = normalizedLetters; // no letter string leaked
+        window.userCollectedAnswer = { tokens: [], letters: [] };
+        userCollectedTokens = [];
+        userCollectedLetters = [];
         hasTimerStarted = false;
 
         startTimer();
+
+        if (sharedMetrics && sharedMetrics.captcha1_attempts.length) {
+            const step = sharedMetrics.captcha1_attempts[sharedMetrics.captcha1_attempts.length - 1];
+            step.challengeId = challengeId;
+            step.randomTokens = normalizedLetters.map(l => l.token);
+            step.challengeStartTs = Date.now();
+        }
 
         drawCaptchaOnCanvas(data.captcha);
 
@@ -119,7 +167,7 @@ if (!window.__CAPTCHA1_LOADED__) {
         if (progressEl) progressEl.innerText = "_ _ _ _";
         if (box) box.innerHTML = "";
 
-        spawnInterval = setInterval(() => spawnLetter(randomLetters), 500);
+        spawnInterval = setInterval(() => spawnLetter(normalizedLetters), 500);
         window.spawnInterval = spawnInterval;
     }
 
@@ -157,7 +205,7 @@ if (!window.__CAPTCHA1_LOADED__) {
         el.style.left = `${startX}px`;
         el.style.top = `${startY}px`;
 
-        el.onclick = (e) => pickLetter(el, letter_data.letter, e);
+        el.onclick = (e) => pickLetter(el, letter_data.token, e);
 
         box.appendChild(el);
         fall(el, dx, dy, w, h);
@@ -180,17 +228,33 @@ if (!window.__CAPTCHA1_LOADED__) {
         }, 40);
     }
 
-    function pickLetter(el, letter, event) {
+    function pickLetter(el, letterToken, event) {
         el.remove();
 
-        if (userCollected.length >= 4) return;
+        if (userCollectedTokens.length >= 4) return;
 
-        userCollected += letter;
-        window.userCollectedAnswer = userCollected;
+        userCollectedTokens.push(letterToken);
+
+        const meta = letterMetaByToken[letterToken];
+        if (meta && meta.letter) {
+            userCollectedLetters.push(meta.letter);
+        }
+
+        window.userCollectedAnswer = {
+            tokens: [...userCollectedTokens],
+            letters: [...userCollectedLetters]
+        };
+
+        if (sharedMetrics && sharedMetrics.captcha1_attempts.length) {
+            const step = sharedMetrics.captcha1_attempts[sharedMetrics.captcha1_attempts.length - 1];
+            step.randomTokens = step.randomTokens || normalizedLetters.map(l => l.token);
+            step.selectedTokens = step.selectedTokens || [];
+            step.selectedTokens.push(letterToken);
+        }
 
         updateProgress();
 
-        if (userCollected.length === 4) {
+        if (userCollectedTokens.length === 4) {
             clearInterval(spawnInterval);
             spawnInterval = null;
             window.spawnInterval = null;
@@ -203,15 +267,42 @@ if (!window.__CAPTCHA1_LOADED__) {
     function updateProgress() {
         const p = document.getElementById("progress");
         if (!p) return;
-        p.innerText = userCollected.padEnd(4, "_").split("").join(" ");
+        const slots = 4;
+        p.innerHTML = "";
+        for (let i = 0; i < slots; i++) {
+            const slot = document.createElement("span");
+            slot.className = "progress-slot";
+
+            const token = userCollectedTokens[i];
+            if (token && letterMetaByToken[token]) {
+                const img = document.createElement("img");
+                img.src = letterMetaByToken[token].img;
+                img.alt = "selected";
+                img.width = 40;
+                img.height = 40;
+                slot.appendChild(img);
+            } else {
+                slot.innerText = "_";
+            }
+
+            p.appendChild(slot);
+        }
     }
 
     async function verifyCaptcha1() {
         try {
+            const answerTokens = [...userCollectedTokens];
+            const fallbackLetters = userCollectedLetters.join("");
+
             const res = await fetch(`${CAPTCHA1_API}/verify`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({  challengeId, answer: userCollected })
+                body: JSON.stringify({
+                    challengeId,
+                    answer_tokens: answerTokens,
+                    // keep legacy string for backward compatibility
+                    answer: fallbackLetters || undefined
+                })
             });
             return await res.json();
         } catch {

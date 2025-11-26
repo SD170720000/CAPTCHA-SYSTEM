@@ -1,7 +1,7 @@
 [
     {
         "file": "a3c1f7d2.svg",
-        "statement": "Verify: The image shows an orange chair beside a small brown table against a teal wall.",
+        "statement": "Verify: The image shows an orange sofa beside a small brown table against a teal wall.",
         "answer_is_true": true
     },
     {
@@ -16,7 +16,7 @@
     },
     {
         "file": "d5b8f2c4.svg",
-        "statement": "Verify: The picture shows two cats sitting following one another towards the right",
+        "statement": "Verify: The picture shows two cats following one another towards the right",
         "answer_is_true": false
     },
     {

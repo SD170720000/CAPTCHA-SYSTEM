@@ -49,6 +49,22 @@
     margin: 15px 0;
     font-size: var(--fs4);
     letter-spacing: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-slot {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--c3);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
 }
 
 #timer-bar-wrapper {

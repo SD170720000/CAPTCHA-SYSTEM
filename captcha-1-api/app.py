@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import random, string, uuid, time, base64
 from PIL import Image, ImageDraw, ImageFont
-import io, os
+import io, os, hashlib
 
 
 app = Flask(__name__)
@@ -96,6 +96,10 @@ def make_captcha_media(word, animated=False):
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+def hash_bytes_sha256(data: bytes) -> str:
+    return hashlib.sha256(data or b"").hexdigest()
+
+
 
 #############################################
 # API
@@ -111,22 +115,33 @@ def get_challenge():
     CHALLENGES[challenge_id] = {
         "sessionId": session_id,
         "answer": word,
+        "answer_tokens": [],
         "ts": time.time()
     }
 
     main_img = make_captcha_media(word, animated=True)
 
 
-    letters = list(word)
-    random.shuffle(letters)
-
-    payload = []
-    for c in letters:
+    # Build per-position tiles once so hashes stay aligned with the expected order.
+    tiles_in_order = []
+    for c in word:
         tile = make_letter_tile(c)
         buf = io.BytesIO()
         tile.save(buf, format="WEBP")
-        b64 = base64.b64encode(buf.getvalue()).decode()
-        payload.append({"letter": c, "img": f"data:image/webp;base64,{b64}"})
+        raw = buf.getvalue()
+        token = hash_bytes_sha256(raw)
+        b64 = base64.b64encode(raw).decode()
+        tiles_in_order.append({
+            # Send only hashes/tokens + image; no plaintext letters to the client.
+            "token": token,
+            "letter_hash": token,
+            "img": f"data:image/webp;base64,{b64}"
+        })
+
+    CHALLENGES[challenge_id]["answer_tokens"] = [t["token"] for t in tiles_in_order]
+
+    payload = tiles_in_order.copy()
+    random.shuffle(payload)
 
 
     return jsonify({
@@ -142,8 +157,20 @@ def verify():
     data = request.json or {}
     challenge_id = data.get("challengeId")
     answer = (data.get("answer") or "").strip().upper()
-    expected = CHALLENGES.get(challenge_id,{}).get("answer")
-    return {"status": "passed" if answer == expected else "failed"}
+    tokens = data.get("answer_tokens") or []
+
+    challenge = CHALLENGES.get(challenge_id, {})
+    expected = challenge.get("answer")
+    expected_tokens = challenge.get("answer_tokens") or []
+
+    # Prefer token-based validation; fallback to legacy plain answer.
+    passed = False
+    if tokens and expected_tokens:
+        passed = list(tokens) == list(expected_tokens)
+    elif expected:
+        passed = answer == expected
+
+    return {"status": "passed" if passed else "failed"}
 
 
 if __name__ == "__main__":
