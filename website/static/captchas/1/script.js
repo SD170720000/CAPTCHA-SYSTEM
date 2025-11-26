@@ -109,7 +109,6 @@ if (!window.__CAPTCHA1_LOADED__) {
         userCollected = "";
         hasTimerStarted = false;
 
-        METRICS.start();
         startTimer();
 
         drawCaptchaOnCanvas(data.captcha);
@@ -182,13 +181,6 @@ if (!window.__CAPTCHA1_LOADED__) {
     }
 
     function pickLetter(el, letter, event) {
-        const eleData = el.getBoundingClientRect();
-        METRICS.registerLetterClick(
-            letter, event.clientX, event.clientY,
-            eleData.left + (eleData.width/2),
-            eleData.top + (eleData.height/2)
-        );
-
         el.remove();
 
         if (userCollected.length >= 4) return;

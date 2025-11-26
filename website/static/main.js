@@ -48,8 +48,6 @@ document.getElementById("start-btn").onclick = async () => {
         sessionId = data.session_id;
         window.sessionId = sessionId;
 
-        if (window.METRICS?.start) window.METRICS.start();
-
         await loadCaptcha0();
     }
 
@@ -81,8 +79,7 @@ async function loadCaptcha0() {
     s.onload = () => {
         if (typeof window.initCaptcha0 === "function") {
             window.initCaptcha0({
-                onPassed: () => loadCaptcha1(),
-                onFailed: () => loadCaptcha0()
+                onPassed: () => loadCaptcha1()
             });
         }
     };
@@ -106,6 +103,8 @@ async function loadCaptcha1() {
     }
 
     loadAttemptUI(attemptData.attempt);
+
+    window.__CURRENT_ATTEMPT__ = attemptData.attempt;
 
     const container = document.getElementById("captcha-container");
     container.innerHTML = "";
@@ -162,9 +161,7 @@ async function sendVerify(statusOverride = null) {
         }
     }
 
-    let behaviourMetrics = {};
-    if (window.collectFinalMetrics)
-        behaviourMetrics = window.collectFinalMetrics();
+    const attemptNumber = window.__CURRENT_ATTEMPT__ || 1;
 
     const res = await fetch(`/verify/1`, {
         method: "POST",
@@ -172,7 +169,7 @@ async function sendVerify(statusOverride = null) {
         body: JSON.stringify({
             session_id: sessionId,
             status: status,
-            metrics: behaviourMetrics
+            user_answer: userAnswer
         })
     });
 

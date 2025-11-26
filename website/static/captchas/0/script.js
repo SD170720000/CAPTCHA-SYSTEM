@@ -7,6 +7,7 @@ let onPassed = null;
 let onFailed = null;
 let btnTrue = null;
 let btnFalse = null;
+let challengeData0 = null;
 
 window.__CLEANUP__ = function () {
     if (btnTrue) btnTrue.onclick = null;
@@ -30,6 +31,7 @@ async function initCaptcha0(opts = {}) {
 
     const res = await fetch(`${CAPTCHA0_API}/get_challenge?sessionId=${encodeURIComponent(window.sessionId)}`);
     const data = await res.json();
+    challengeData0 = data;
     challengeId0 = data.challengeId;
 
     document.getElementById("syco-prompt").innerText = data.prompt;
@@ -67,23 +69,25 @@ async function verifyCaptcha0(choice) {
         }
     });
 
-    if (data.status === "passed") {
-        if (helper) {
-            helper.innerText = "Correct. Moving to the next captcha.";
-            helper.style.color = "green";
-        }
-        setTimeout(() => {
-            if (typeof onPassed === "function") onPassed();
-        }, 300);
-    } else {
-        if (helper) {
-            helper.innerText = "Incorrect. Please try a new scene.";
-            helper.style.color = "var(--c7)";
-        }
-        setTimeout(() => {
-            if (typeof onFailed === "function") onFailed();
-        }, 400);
+    const passed = data.status === "passed";
+
+    window.__CAPTCHA0_STATUS__ = {
+        status: data.status,
+        passed,
+        timestamp: Date.now()
+    };
+
+    if (helper) {
+        helper.innerText = passed
+            ? "Checked. Moving to the next captcha."
+            : "Recorded. Proceeding to the next captcha.";
+        helper.style.color = passed ? "green" : "var(--c7)";
     }
+
+    // Only one attempt: proceed to next captcha regardless of outcome.
+    setTimeout(() => {
+        if (typeof onPassed === "function") onPassed({ passed });
+    }, 400);
 }
 
 window.initCaptcha0 = initCaptcha0;
