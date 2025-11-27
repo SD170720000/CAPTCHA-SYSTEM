@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import uuid, time, os, json
+from defense import run_defense
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)
@@ -239,10 +240,13 @@ def verify(cid):
 
         persist_session_to_disk(session_id, session)
 
+        is_human = run_defense(meta["telemetry"])['is_human']
+
         return jsonify({
             "status": "passed",
             "completed": True,
-            "session_final_result": session.get("final_result")
+            "session_final_result": session.get("final_result"),
+            "is_human": is_human
         })
 
     # FAILED

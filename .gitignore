@@ -1,0 +1,4 @@
+attempts/*
+venv/*
+.DS_Store
+defense/venv/

@@ -16,7 +16,7 @@ FONT_PATH = os.path.join(BASE_DIR, "fonts", "Kablammo.ttf")
 
 
 def gen_word():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=MAX_WORD_COUNT))
+    return ''.join(random.sample(string.ascii_uppercase + string.digits, k=MAX_WORD_COUNT))
 
 
 #############################################

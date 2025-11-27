@@ -1,0 +1,6 @@
+numpy
+tensorflow-macos
+tensorflow-metal
+matplotlib
+joblib
+scikit-learn

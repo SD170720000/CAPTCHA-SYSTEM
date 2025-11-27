@@ -444,8 +444,8 @@ function showSuccessUI(data) {
     const container = document.getElementById("captcha-container");
     document.getElementById("final-verify-btn").disabled = true;
 
-    const behaviour = (data && data.behaviour) || {};
-    const isHuman = typeof behaviour.is_human === "boolean" ? behaviour.is_human : true;
+    const behaviour = data|| {};
+    const isHuman = behaviour.is_human;
     const score = typeof behaviour.score !== "undefined" ? behaviour.score : "n/a";
 
     container.innerHTML = `
@@ -453,7 +453,6 @@ function showSuccessUI(data) {
             <h2 style="color:green;">Successfull Attempt!</h2>
             <p style="color:${isHuman ? "green" : "var(--c7)"};">
                 ${isHuman ? "Human Detected!" : "Bot Detected!"}
-                (score: ${score})
             </p>
             <button id="resolve-btn" class="final-btn">Resolve Captcha</button>
         </div>
