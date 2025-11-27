@@ -35,12 +35,16 @@ def resample_and_normalize(path):
 # ----------------------------------
 def rule_based_check(metrics):
     clicks = metrics.get("bubble_clicks", [])
+    mouse_path = metrics.get("mouse_path", [])
     solve_ms = metrics.get("total_solve_time_ms", 99999)
 
     # must click 4 bubbles
     if len(clicks) != 4:
         return False
 
+    if len(mouse_path) <= 100:
+        return False
+    
     # must not solve too fast (<24.5 sec)
     if solve_ms / 1000 < 24.5:
         return False
