@@ -240,6 +240,20 @@ if (!window.__CAPTCHA1_LOADED__) {
             userCollectedLetters.push(meta.letter);
         }
 
+        // track bubble click location/time separately from general clicks
+        if (sharedMetrics && sharedMetrics.captcha1_attempts.length) {
+            const now = Date.now();
+            const last = sharedMetrics.captcha1_attempts[sharedMetrics.captcha1_attempts.length - 1];
+            last.bubble_clicks = last.bubble_clicks || [];
+            if (last.bubble_clicks.length < 200) {
+                last.bubble_clicks.push({
+                    x: event?.clientX ?? null,
+                    y: event?.clientY ?? null,
+                    t: now
+                });
+            }
+        }
+
         window.userCollectedAnswer = {
             tokens: [...userCollectedTokens],
             letters: [...userCollectedLetters]

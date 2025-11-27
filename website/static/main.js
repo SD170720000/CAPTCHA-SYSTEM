@@ -15,8 +15,35 @@ const metrics = {
     device: collectDeviceFingerprint(),
     sessionId: null,
     currentStep: "intro",
-    intro: { mouse_moves: 0, clicks: 0, startedAt: Date.now(), endedAt: null },
-    captcha0: { mouse_moves: 0, clicks: 0, startedAt: null, endedAt: null, result: null, time_taken_ms: null },
+    lastEventTs: null,
+    intro: {
+        mouse_moves: 0,
+        clicks: 0,
+        startedAt: Date.now(),
+        endedAt: null,
+        mouse_path: [],
+        normal_clicks: [],
+        bubble_clicks: [],
+        idle_segments: [],
+        captcha_canvas_hover_time: 0,
+        submit_button_hover_time: 0,
+        bubble_area_hover_time: 0
+    },
+    captcha0: {
+        mouse_moves: 0,
+        clicks: 0,
+        startedAt: null,
+        endedAt: null,
+        result: null,
+        time_taken_ms: null,
+        mouse_path: [],
+        normal_clicks: [],
+        bubble_clicks: [],
+        idle_segments: [],
+        captcha_canvas_hover_time: 0,
+        submit_button_hover_time: 0,
+        bubble_area_hover_time: 0
+    },
     captcha1_attempts: []
 };
 
@@ -55,7 +82,14 @@ function setCurrentStep(stepName) {
                 startedAt: now,
                 endedAt: null,
                 result: null,
-                time_taken_ms: null
+                time_taken_ms: null,
+                mouse_path: [],
+                normal_clicks: [],
+                bubble_clicks: [],
+                idle_segments: [],
+                captcha_canvas_hover_time: 0,
+                submit_button_hover_time: 0,
+                bubble_area_hover_time: 0
             });
         } else {
             const last = metrics.captcha1_attempts[metrics.captcha1_attempts.length - 1];
@@ -77,14 +111,39 @@ function getActiveBucket() {
     return metrics.intro;
 }
 
-function recordMove() {
-    const bucket = getActiveBucket();
-    bucket.mouse_moves += 1;
+const IDLE_THRESHOLD_MS = 1500;
+
+function noteIdleSegments(nowTs) {
+    if (metrics.lastEventTs && nowTs - metrics.lastEventTs > IDLE_THRESHOLD_MS) {
+        const bucket = getActiveBucket();
+        const duration = nowTs - metrics.lastEventTs;
+        bucket.idle_segments.push({
+            stime: metrics.lastEventTs,
+            etime: nowTs,
+            duration
+        });
+    }
+    metrics.lastEventTs = nowTs;
 }
 
-function recordClick() {
+function recordMove(ev) {
     const bucket = getActiveBucket();
+    const now = Date.now();
+    noteIdleSegments(now);
+    bucket.mouse_moves += 1;
+    if (bucket.mouse_path.length < 500) {
+        bucket.mouse_path.push({ x: ev.clientX, y: ev.clientY, t: now });
+    }
+}
+
+function recordClick(ev) {
+    const bucket = getActiveBucket();
+    const now = Date.now();
+    noteIdleSegments(now);
     bucket.clicks += 1;
+    if (bucket.normal_clicks.length < 200) {
+        bucket.normal_clicks.push({ x: ev.clientX, y: ev.clientY, t: now });
+    }
 }
 
 function markResult(stepName, result) {
@@ -102,8 +161,22 @@ function markResult(stepName, result) {
     }
 }
 
-window.addEventListener("pointermove", () => recordMove(), { passive: true });
-window.addEventListener("click", () => recordClick(), { passive: true });
+window.addEventListener("pointermove", (e) => recordMove(e), { passive: true });
+window.addEventListener("click", (e) => recordClick(e), { passive: true });
+
+function wireHoverTracking(el, fieldName) {
+    if (!el || el.dataset.hoverTrackBound === "1") return;
+    el.dataset.hoverTrackBound = "1";
+    let start = null;
+    el.addEventListener("pointerenter", () => { start = Date.now(); }, { passive: true });
+    el.addEventListener("pointerleave", () => {
+        if (!start) return;
+        const now = Date.now();
+        const bucket = getActiveBucket();
+        bucket[fieldName] = (bucket[fieldName] || 0) + (now - start);
+        start = null;
+    }, { passive: true });
+}
 
 function buildTelemetryPayload(finalStatus) {
     return {
@@ -186,6 +259,9 @@ async function loadCaptcha0() {
 
     const html = await fetch("/load_captcha/0").then(r => r.text());
     container.innerHTML = html;
+    wireHoverTracking(document.getElementById("syco-img"), "captcha_canvas_hover_time");
+    wireHoverTracking(document.getElementById("final-verify-btn"), "submit_button_hover_time");
+    wireHoverTracking(document.querySelector(".choice-row"), "bubble_area_hover_time");
 
     const s = document.createElement("script");
     s.src = "/static/captchas/0/script.js";
@@ -223,7 +299,13 @@ async function loadCaptcha1() {
         startedAt: Date.now(),
         endedAt: null,
         result: null,
-        time_taken_ms: null
+        time_taken_ms: null,
+        mouse_path: [],
+        bubble_clicks: [],
+        idle_segments: [],
+        captcha_canvas_hover_time: 0,
+        submit_button_hover_time: 0,
+        bubble_area_hover_time: 0
     });
     setCurrentStep("captcha1");
     loadAttemptUI(attemptData.attempt);
@@ -243,6 +325,9 @@ async function loadCaptcha1() {
 
     const html = await fetch("/load_captcha/1").then(r => r.text());
     container.innerHTML = html;
+    wireHoverTracking(document.getElementById("captcha-canvas"), "captcha_canvas_hover_time");
+    wireHoverTracking(document.getElementById("final-verify-btn"), "submit_button_hover_time");
+    wireHoverTracking(document.getElementById("fall-container"), "bubble_area_hover_time");
 
     const s = document.createElement("script");
     s.src = "/static/captchas/1/script.js";
