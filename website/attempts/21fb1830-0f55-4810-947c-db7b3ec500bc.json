@@ -1,0 +1,17 @@
+{
+  "21fb1830-0f55-4810-947c-db7b3ec500bc": {
+    "completed": true,
+    "ip_address": "127.0.0.1",
+    "device": null,
+    "captcha-0": {
+      "total_solve_time_ms": 4315
+    },
+    "captcha-1": {
+      "attempt": 0,
+      "max_attempts": 3,
+      "final_result": "passed",
+      "completed": true,
+      "attempt_metadata": {}
+    }
+  }
+}

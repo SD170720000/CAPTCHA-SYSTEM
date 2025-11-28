@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 import joblib
+import time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "svm_mouse.pkl")
@@ -13,9 +14,6 @@ FIXED_LEN = 128
 # Utilities
 # ----------------------------------
 def resample_and_normalize(path):
-    if len(path) < 5:
-        return None
-
     xy = np.array([(p["x"], p["y"]) for p in path], dtype=np.float32)
 
     orig_idx = np.linspace(0, 1, len(xy))
@@ -29,6 +27,64 @@ def resample_and_normalize(path):
 
     return rp.flatten()  # shape (256,)
 
+def extract_timestamps(obj):
+    timestamps = []
+
+    if isinstance(obj, dict):
+        for v in obj.values():
+            timestamps.extend(extract_timestamps(v))
+    elif isinstance(obj, list):
+        for item in obj:
+            timestamps.extend(extract_timestamps(item))
+    else:
+        # verify timestamp like
+        if isinstance(obj, int) and len(str(obj)) >= 10:
+            timestamps.append(obj)
+
+    return timestamps
+
+def is_expired(timestamp_ms, limit_seconds=60):
+    """
+    Determine whether the given timestamp in milliseconds has exceeded the specified number of seconds.
+    Returns True if expired, or False if still valid.
+    """
+    timestamp_s = timestamp_ms / 1000
+    now = time.time()
+
+    return (now - timestamp_s) > limit_seconds
+
+def is_in_future(timestamp_ms, tolerance_seconds=10):
+    """
+    Checks whether the timestamp is significantly ahead of the current time.
+    If it exceeds the tolerance_seconds threshold, it is considered invalid.
+    """
+    timestamp_s = timestamp_ms / 1000
+    now = time.time()
+
+    return timestamp_s > now + tolerance_seconds
+
+def is_timestamp_sequence_valid(mouse_path):
+    for i in range(1, len(mouse_path)):
+        if mouse_path[i]["t"] < mouse_path[i - 1]["t"]:
+            return False
+    return True
+
+
+# ----------------------------------
+# TIMESTAMP CHECK
+# ----------------------------------
+def timestamp_check(metrics):
+    all_ts = extract_timestamps(metrics)
+
+    for ts in all_ts:
+        if is_expired(ts):
+            print("⚠ Timestamp expired:", ts)
+            return False
+        if is_in_future(ts):
+            print("⚠ Timestamp from the future:", ts)
+            return False
+
+    return True
 
 # ----------------------------------
 # RULE-BASED
@@ -73,6 +129,13 @@ def svm_check(mouse_path):
 # FINAL DEFENSE
 # ----------------------------------
 def run_defense(metrics):
+    # 0. timestamp
+    if not timestamp_check(metrics):
+        return {"is_human": False, "reason": "rule_failed"}
+    
+    if not is_timestamp_sequence_valid(metrics["mouse_path"]):
+        return {"is_human": False, "reason": "rule_failed"}
+    
     # 1. rules
     if not rule_based_check(metrics):
         return {"is_human": False, "reason": "rule_failed"}

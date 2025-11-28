@@ -33,11 +33,11 @@ def extract_attempt_snapshot(telemetry: dict, attempt_number: int) -> dict:
     return {k: chosen.get(k) for k in keep_fields if k in chosen}
 
 
+
 def format_captcha0_from_telemetry(telemetry: dict) -> dict:
     bucket = (telemetry or {}).get("captcha0") or {}
     start = bucket.get("startedAt")
     end = bucket.get("endedAt") or bucket.get("firstChoiceTs") or (telemetry or {}).get("collectedAt")
-
     return {
         "challenge_start_time": start,
         "challenge_end_time": end,
@@ -123,6 +123,56 @@ def persist_session_to_disk(session_id: str, data: dict):
     except Exception as e:
         print("persist_session_to_disk failed:", e)
 
+def evaluate_captcha0_result(total_time_ms: float) -> str:
+    """Classify captcha-0 solve time."""
+    if not isinstance(total_time_ms, (int, float)):
+        return "unknown"
+    if total_time_ms < 2000:
+        return "bot"
+    if 2500 <= total_time_ms:
+        return "human"
+    return "unknown"
+
+
+@app.route("/evaluate_captcha0", methods=["POST"])
+def evaluate_captcha0():
+    """Early gate after captcha-0 to decide whether to skip captcha-1."""
+    data = request.json or {}
+    session_id = data.get("session_id")
+    total_time = data.get("total_solve_time_ms")
+    status = data.get("status")
+
+    if status != True:
+        return jsonify({
+            "require_captcha1": True,
+            "completed": False
+        })
+
+    session = sessions.get(session_id)
+    if not session:
+        return jsonify({"error": "invalid session-id"}), 400
+
+    label = evaluate_captcha0_result(total_time)
+
+    # default: require captcha-1
+    require_captcha1 = label != "human"
+
+    # If human, mark session as passed and persist immediately.
+    if label == "human":
+        session["completed"] = True
+        session["final_result"] = "passed"
+        session["completed_timestamp_ms"] = int(time.time() * 1000)
+        session["total_duration_ms"] = session["completed_timestamp_ms"] - session.get("created_timestamp_ms", int(time.time() * 1000))
+        session["captcha0"] = session.get("captcha0") or {"total_solve_time_ms": total_time}
+        # Keep attempt metadata empty because captcha-1 is skipped.
+        persist_session_to_disk(session_id, session)
+
+    return jsonify({
+        "label": label,
+        "require_captcha1": require_captcha1,
+        "completed": session.get("completed", False),
+        "session_final_result": session.get("final_result")
+    })
 
 @app.route("/")
 def home():
@@ -224,6 +274,7 @@ def verify(cid):
         # capture captcha-0 metrics once per session
         if "captcha0" not in session:
             session["captcha0"] = format_captcha0_from_telemetry(telemetry)
+            
 
         # store attempt-level telemetry focused on this attempt only
         meta["telemetry"] = extract_attempt_snapshot(telemetry, attempt)

@@ -1,0 +1,17 @@
+{
+  "39a28686-a600-4563-80c3-8396b2e289e0": {
+    "completed": true,
+    "ip_address": "127.0.0.1",
+    "device": null,
+    "captcha-0": {
+      "total_solve_time_ms": 4888
+    },
+    "captcha-1": {
+      "attempt": 0,
+      "max_attempts": 3,
+      "final_result": "passed",
+      "completed": true,
+      "attempt_metadata": {}
+    }
+  }
+}

@@ -268,13 +268,66 @@ async function loadCaptcha0() {
     s.onload = () => {
         if (typeof window.initCaptcha0 === "function") {
             window.initCaptcha0({
-                onPassed: () => loadCaptcha1()
+                onPassed: () => evaluateCaptcha0Decision(),
             });
         }
     };
     container.appendChild(s);
+
 }
 
+// Decide whether to skip captcha-1 based on captcha-0 solve time.
+async function evaluateCaptcha0Decision() {
+    const computedTime = metrics.captcha0.time_taken_ms ??
+        ((metrics.captcha0.startedAt && metrics.captcha0.endedAt)
+            ? metrics.captcha0.endedAt - metrics.captcha0.startedAt
+            : null);
+
+    // If we cannot compute, fall back to captcha-1.
+    if (computedTime == null) {
+        console.log("No compute Time")
+        return loadCaptcha1();
+    }
+
+    try {
+        const res = await fetch("/evaluate_captcha0", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                session_id: sessionId,
+                total_solve_time_ms: computedTime,
+                status: window.__CAPTCHA0_STATUS__.passed
+            })
+        });
+        const data = await res.json();
+
+
+        if (data.require_captcha1) {
+            return loadCaptcha1();
+        }
+
+        // Mark as completed and show success UI without captcha-1.
+        window.__CAPTCHA_COMPLETED__ = true;
+        markResult("captcha0", "passed");
+    
+        const container = document.getElementById("captcha-container");
+        const btn = document.getElementById("final-verify-btn");
+            if (btn) btn.disabled = true;
+            container.innerHTML = `
+                <div style="text-align:center; padding:30px 0;">
+                    <h2 style="color:green;">Human verified!</h2>
+                    <button id="resolve-btn" class="final-btn">Finish</button>
+                </div>
+            `;
+            console.log("Captcha-1 skipped because of behaviour")
+
+            const resolveBtn = document.getElementById("resolve-btn");
+            if (resolveBtn) resolveBtn.onclick = () => location.reload();
+        } catch (e) {
+            console.error("evaluate_captcha0 failed, continuing to captcha-1", e);
+            return loadCaptcha1();
+        }
+}
 //#############################################################
 // LOAD CAPTCHA FRAME
 //#############################################################
